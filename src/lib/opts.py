@@ -239,6 +239,7 @@ class opts(object):
     self.parser.add_argument('--max_age', type=int, default=-1) # alive thershold when inference
     self.parser.add_argument('--num_pre_data', type=int, default=3) # when training
     self.parser.add_argument('--copy_and_paste', action='store_true')
+    self.parser.add_argument('--avg_track_score', action='store_true')
 
     # CondInst
     self.parser.add_argument('--seg_feat_channel', default=8,type=int,
