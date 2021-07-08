@@ -354,7 +354,6 @@ class opts(object):
       if not len(thr) == num_classes:
         if len(thr)  == 1:
           thr  = thr * num_classes
-      print(thr)
       assert len(thr) == num_classes, "threshold and class inconsistency"    
       return thr
 
@@ -375,6 +374,10 @@ class opts(object):
       opt.new_thresh = [max(x, y) for x, y in zip(opt.track_thresh, opt.new_thresh)]
 
       opt.pre_img = not opt.no_pre_img
+      print(opt.track_thresh)
+      print(opt.out_thresh)
+      print(opt.pre_thresh)
+      print(opt.new_thresh)
       print('Using tracking threshold for out threshold!', opt.track_thresh)
       if 'ddd' in opt.task:
         opt.show_track_color = True

@@ -9,38 +9,51 @@ class Tracker(object):
     self.reset()
 
   def init_track(self, results):
-    for item in results:
-      if item['score'] > self.opt.new_thresh[item['class']-1]:
-        self.id_count += 1
-        # active and age are never used in the paper
-        item['active'] = 1
-        item['age'] = 1
-        item['tracking_id'] = self.id_count
-        if not ('ct' in item):
-          bbox = item['bbox']
-          item['ct'] = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2]
-        self.tracks.append(item)
+    for clas in range(self.opt.num_classes):
+      for item in results:
+        if item['score'] > self.opt.new_thresh[item['class'] - 1]:
+          self.id_count += 1
+          # active and age are never used in the paper
+          item['active'] = 1
+          item['age'] = 1
+          item['tracking_id'] = self.id_count
+          if not ('ct' in item):
+            bbox = item['bbox']
+            item['ct'] = [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2]
+          self.tracks[clas].append(item)
 
   def reset(self):
     self.id_count = 0
     self.tracks = []
+    for clas in range(self.opt.num_classes):
+      self.tracks.append([])
 
-  def step(self, results, public_det=None):
+  def step(self, results, public_det):
+    ret = []
+    for clas in range(self.opt.num_classes):
+      ret = ret + self.step_class_specify(results, clas, public_det)
+    return ret
+  def step_class_specify(self, all_results, clas ,public_det=None):
+    results = []
+    for r in all_results:
+      if r['class'] - 1 == clas:
+        results.append(r)
+
     N = len(results)
-    M = len(self.tracks)
+    M = len(self.tracks[clas])
 
     dets = np.array(
       [det['ct'] + det['tracking'] for det in results], np.float32) # N x 2
     track_size = np.array([((track['bbox'][2] - track['bbox'][0]) * \
       (track['bbox'][3] - track['bbox'][1])) \
-      for track in self.tracks], np.float32) # M
-    track_cat = np.array([track['class'] for track in self.tracks], np.int32) # M
+      for track in self.tracks[clas]], np.float32) # M
+    track_cat = np.array([track['class'] for track in self.tracks[clas]], np.int32) # M
     item_size = np.array([((item['bbox'][2] - item['bbox'][0]) * \
       (item['bbox'][3] - item['bbox'][1])) \
       for item in results], np.float32) # N
     item_cat = np.array([item['class'] for item in results], np.int32) # N
     tracks = np.array(
-      [pre_det['ct'] for pre_det in self.tracks], np.float32) # M x 2
+      [pre_det['ct'] for pre_det in self.tracks[clas]], np.float32) # M x 2
     dist = (((tracks.reshape(1, -1, 2) - \
               dets.reshape(-1, 1, 2)) ** 2).sum(axis=2)) # N x M
 
@@ -76,16 +89,13 @@ class Tracker(object):
     ret = []
     for m in matches:
       track = results[m[0]]
-      track['tracking_id'] = self.tracks[m[1]]['tracking_id']
+      track['tracking_id'] = self.tracks[clas][m[1]]['tracking_id']
       track['age'] = 1
-      track['active'] = self.tracks[m[1]]['active'] + 1
-      #######################  Waiting for test  ##########################
-      #track['score'] = (track['score'] + self.tracks[m[1]]['score']) / 2.0
-      #####################################################################
+      track['active'] = self.tracks[clas][m[1]]['active'] + 1
       ret.append(track)
 
     if self.opt.public_det and len(unmatched_dets) > 0:
-      # Public detection: only create tracks from provided detections
+      # Public detection: only create tracks[clas] from provided detections
       pub_dets = np.array([d['ct'] for d in public_det], np.float32)
       dist3 = ((dets.reshape(-1, 1, 2) - pub_dets.reshape(1, -1, 2)) ** 2).sum(
         axis=2)
@@ -97,17 +107,17 @@ class Tracker(object):
         if dist3[i, j] < item_size[i]:
           dist3[i, :] = 1e18
           track = results[i]
-          if track['score'] > self.opt.new_thresh[track['class']-1]:
+          if track['score'] > self.opt.new_thresh[track['class'] - 1]:
             self.id_count += 1
             track['tracking_id'] = self.id_count
             track['age'] = 1
             track['active'] = 1
             ret.append(track)
     else:
-      # Private detection: create tracks for all un-matched detections
+      # Private detection: create tracks[clas] for all un-matched detections
       for i in unmatched_dets:
         track = results[i]
-        if track['score'] > self.opt.new_thresh[track['class']-1]:
+        if track['score'] > self.opt.new_thresh[track['class'] - 1]:
           self.id_count += 1
           track['tracking_id'] = self.id_count
           track['age'] = 1
@@ -115,10 +125,10 @@ class Tracker(object):
           ret.append(track)
     
     
-    tracks = copy.deepcopy(ret)
+    tracks= copy.deepcopy(ret)
 
     for i in unmatched_tracks:
-      track = self.tracks[i]
+      track = self.tracks[clas][i]
       if track['age'] < self.opt.max_age:
         track['age'] += 1
         track['active'] = 0
@@ -130,9 +140,13 @@ class Tracker(object):
           bbox[2] + v[0], bbox[3] + v[1]]
         track['ct'] = [ct[0] + v[0], ct[1] + v[1]]
         tracks.append(track)
-    self.tracks = tracks
+    self.tracks[clas] = tracks
     return ret
-
+  def get_all_tracks(self):
+    track = []
+    for clas in range(self.opt.num_classes):
+      track = track + self.tracks[clas]
+    return track
 def greedy_assignment(dist):
   matched_indices = []
   if dist.shape[1] == 0:
@@ -143,3 +157,4 @@ def greedy_assignment(dist):
       dist[:, j] = 1e18
       matched_indices.append([i, j])
   return np.array(matched_indices, np.int32).reshape(-1, 2)
+

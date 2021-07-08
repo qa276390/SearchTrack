@@ -112,7 +112,7 @@ class Detector(object):
           # We used pre_inds for learning an offset from previous image to
           # the current image.
           pre_images, pre_hms, pre_inds = self._get_additional_inputs(
-            self.tracker.tracks, meta, self.pre_images, self.age_images, with_hm=not self.opt.zero_pre_hm)
+            self.tracker.get_all_tracks(), meta, self.pre_images, self.age_images, with_hm=not self.opt.zero_pre_hm)
           self.pre_images = pre_images
       
       pre_process_time = time.time()
@@ -273,7 +273,7 @@ class Detector(object):
 
     output_inds = []
     for track in tracks:
-      if track['score'] < self.opt.pre_thresh[track['class']-1]: #or det['active'] == 0:
+      if track['score'] < self.opt.pre_thresh[track['class'] - 1]: #or det['active'] == 0:
         continue
       bbox = self._trans_bbox(track['bbox'], trans_input, inp_width, inp_height)
       bbox_out = self._trans_bbox(
