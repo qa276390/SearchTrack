@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 
 from .base_model import BaseModel
+from .PSA import PSA_p, PSA_s
 
 try:
     from .DCNv2.dcn_v2 import DCN
@@ -233,8 +234,11 @@ class DLA(nn.Module):
                  block=BasicBlock, residual_root=False, linear_root=False,
                  opt=None):
         super(DLA, self).__init__()
+        self.opt = opt
         self.channels = channels
         self.num_classes = num_classes
+        if opt is not None and opt.psa:
+          self.psa = PSA_s(channels[0], channels[0])
         self.base_layer = nn.Sequential(
             nn.Conv2d(3, channels[0], kernel_size=7, stride=1,
                       padding=3, bias=False),
@@ -309,6 +313,9 @@ class DLA(nn.Module):
             x = x + self.pre_img_layer(pre_img)
         if pre_hm is not None:
             x = x + self.pre_hm_layer(pre_hm)
+
+        if self.opt.psa:
+            x = self.psa(x)
         for i in range(6):
             x = getattr(self, 'level{}'.format(i))(x)
             y.append(x)
