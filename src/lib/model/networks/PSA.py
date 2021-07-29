@@ -61,8 +61,8 @@ class PSA_p(nn.Module):
         self.conv_q_left.inited = True
         self.conv_v_left.inited = True
 
-    def spatial_pool(self, x):
-        input_x = self.conv_v_right(x)
+    def spatial_pool(self, x_q, x_v):
+        input_x = self.conv_v_right(x_v)
 
         batch, channel, height, width = input_x.size()
 
@@ -70,7 +70,7 @@ class PSA_p(nn.Module):
         input_x = input_x.view(batch, channel, height * width)
 
         # [N, 1, H, W]
-        context_mask = self.conv_q_right(x)
+        context_mask = self.conv_q_right(x_q)
 
         # [N, 1, H*W]
         context_mask = context_mask.view(batch, 1, height * width)
@@ -90,13 +90,13 @@ class PSA_p(nn.Module):
         # [N, OC, 1, 1]
         mask_ch = self.sigmoid(context)
 
-        out = x * mask_ch
+        out = x_v * mask_ch
 
         return out
 
-    def channel_pool(self, x):
+    def channel_pool(self, x_q, x_v):
         # [N, IC, H, W]
-        g_x = self.conv_q_left(x)
+        g_x = self.conv_q_left(x_q)
 
         batch, channel, height, width = g_x.size()
 
@@ -109,7 +109,7 @@ class PSA_p(nn.Module):
         avg_x = avg_x.view(batch, channel, avg_x_h * avg_x_w).permute(0, 2, 1)
 
         # [N, IC, H*W]
-        theta_x = self.conv_v_left(x).view(batch, self.inter_planes, height * width)
+        theta_x = self.conv_v_left(x_v).view(batch, self.inter_planes, height * width)
 
         # [N, 1, H*W]
         # context = torch.einsum('nde,new->ndw', avg_x, theta_x)
@@ -123,15 +123,15 @@ class PSA_p(nn.Module):
         # [N, 1, H, W]
         mask_sp = self.sigmoid(context)
 
-        out = x * mask_sp
+        out = x_v * mask_sp
 
         return out
 
-    def forward(self, x):
+    def forward(self, x_q, x_v):
         # [N, C, H, W]
-        context_channel = self.spatial_pool(x)
+        context_channel = self.spatial_pool(x_q, x_v)
         # [N, C, H, W]
-        context_spatial = self.channel_pool(x)
+        context_spatial = self.channel_pool(x_q, x_v)
         # [N, C, H, W]
         out = context_spatial + context_channel
         return out

@@ -238,7 +238,8 @@ class DLA(nn.Module):
         self.channels = channels
         self.num_classes = num_classes
         if opt is not None and opt.patt:
-          self.patt = PolarAtt(channels[0], channels[0])
+          #self.patt = PolarAtt(channels[0], channels[0])
+          self.patt = PSA_p(channels[0], channels[0])
         self.base_layer = nn.Sequential(
             nn.Conv2d(3, channels[0], kernel_size=7, stride=1,
                       padding=3, bias=False),
@@ -312,7 +313,9 @@ class DLA(nn.Module):
 
         if self.opt.patt and (pre_img is not None) and (pre_hm is not None):
             x_pre = self.pre_img_layer(pre_img) + self.pre_hm_layer(pre_hm)
-            x = self.patt(x_k = x_pre, x_q = x)
+            #x = self.patt(x_k = x_pre, x_q = x)
+            x = self.patt(x_q = x_pre, x_v = x)
+            x = x + x_pre
         else:
             if pre_img is not None:
                 x = x + self.pre_img_layer(pre_img)
