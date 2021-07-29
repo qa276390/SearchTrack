@@ -274,17 +274,13 @@ class PolarAtt(nn.Module):
         self.stride = stride
         self.padding = (kernel_size-1)//2
 
-        self.conv_q_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=3, stride=stride, padding=0, bias=False)
-        self.conv_k_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=3, stride=stride, padding=0, bias=False)
-        self.conv_v_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=3, stride=stride, padding=0, bias=False)
+        self.conv_q_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
+        self.conv_k_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
+        self.conv_v_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
         self.conv_up = nn.Conv2d(self.inter_planes, self.planes, kernel_size=1, stride=1, padding=0, bias=False)
         self.softmax_right = nn.Softmax(dim=2)
         self.sigmoid = nn.Sigmoid()
 
-        # self.conv_q_left = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)   #g
-        # self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        # self.conv_v_left = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)   #theta
-        # self.softmax_left = nn.Softmax(dim=2)
 
         self.reset_parameters()
 
@@ -292,39 +288,37 @@ class PolarAtt(nn.Module):
         kaiming_init(self.conv_q_right, mode='fan_in')
         kaiming_init(self.conv_v_right, mode='fan_in')
         kaiming_init(self.conv_k_right, mode='fan_in')
-        # kaiming_init(self.conv_q_left, mode='fan_in')
-        # kaiming_init(self.conv_v_left, mode='fan_in')
 
         self.conv_q_right.inited = True
         self.conv_v_right.inited = True
         self.conv_k_right.inited = True
-        # self.conv_q_left.inited = True
-        # self.conv_v_left.inited = True
+
 
     def spatial_pool(self, x_q, x_k): # channel-only
         input_x = self.conv_q_right(x_q)
 
         batch, channel, height, width = input_x.size()
+        batch, channel, M = x_k.size()
 
         # [N, IC, H*W]
         input_x = input_x.view(batch, channel, height * width)
 
-        # [N, IC, H, W]
+        # [N, IC, M]
         context_mask = self.conv_k_right(x_k)
 
-        # [N, IC, H*W]
-        context_mask = context_mask.view(batch, channel, height * width)
+        # [N, IC, M]
+        context_mask = context_mask.view(batch, channel, M)
 
-        # [N, H*W, H*W]
+        # [N, H*W, M]
         context = torch.matmul(input_x.transpose(1,2), context_mask)
 
-        # [N, H*W, H*W]
+        # [N, H*W, M]
         context = self.softmax_right(context)
 
-        # [N, IC, H, W]
+        # [N, IC, M]
         value = self.conv_v_right(x_k)
 
-        # [N, IC, H*W]
+        # [N, IC, M]
         value = value.view(batch, channel, height * width)
 
         # [N, IC, H*W]
@@ -332,45 +326,11 @@ class PolarAtt(nn.Module):
 
         return out
 
-    # def channel_pool(self, x):
-    #     # [N, IC, H, W]
-    #     g_x = self.conv_q_left(x)
-
-    #     batch, channel, height, width = g_x.size()
-
-    #     # [N, IC, 1, 1]
-    #     avg_x = self.avg_pool(g_x)
-
-    #     batch, channel, avg_x_h, avg_x_w = avg_x.size()
-
-    #     # [N, 1, IC]
-    #     avg_x = avg_x.view(batch, channel, avg_x_h * avg_x_w).permute(0, 2, 1)
-
-    #     # [N, IC, H*W]
-    #     theta_x = self.conv_v_left(x).view(batch, self.inter_planes, height * width)
-
-    #     # [N, 1, H*W]
-    #     # context = torch.einsum('nde,new->ndw', avg_x, theta_x)
-    #     context = torch.matmul(avg_x, theta_x)
-    #     # [N, 1, H*W]
-    #     context = self.softmax_left(context)
-
-    #     # [N, 1, H, W]
-    #     context = context.view(batch, 1, height, width)
-
-    #     # [N, 1, H, W]
-    #     mask_sp = self.sigmoid(context)
-
-    #     out = x * mask_sp
-
-    #     return out
+  
 
     def forward(self, x_q, x_k):
         # [N, C, H, W]
         context_channel = self.spatial_pool(x_q, x_k) + x_q
         out = context_channel
-        # [N, C, H, W]
-        #context_spatial = self.channel_pool(x_q, x_k)
-        # [N, C, H, W]
-        #out = context_spatial + context_channel
+
         return out

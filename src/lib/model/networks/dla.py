@@ -16,6 +16,10 @@ import torch.utils.model_zoo as model_zoo
 from .base_model import BaseModel
 from .PSA import PSA_p, PSA_s, PolarAtt
 
+from .posenc import PositionalEncodingPermute2D
+from ..utils import _gather_feat, _tranpose_and_gather_feat
+from ..utils import _nms, _topk, _topk_channel
+
 try:
     from .DCNv2.dcn_v2 import DCN
 except:
@@ -238,8 +242,8 @@ class DLA(nn.Module):
         self.channels = channels
         self.num_classes = num_classes
         if opt is not None and opt.patt:
-          #self.patt = PolarAtt(channels[0], channels[0])
-          self.patt = PSA_p(channels[0], channels[0])
+          self.patt = PolarAtt(channels[0], channels[0])
+          self.pos_enc = PositionalEncodingPermute2D(channels[0])
         self.base_layer = nn.Sequential(
             nn.Conv2d(3, channels[0], kernel_size=7, stride=1,
                       padding=3, bias=False),
@@ -312,10 +316,18 @@ class DLA(nn.Module):
         x = self.base_layer(x)
 
         if self.opt.patt and (pre_img is not None) and (pre_hm is not None):
-            x_pre = self.pre_img_layer(pre_img) + self.pre_hm_layer(pre_hm)
-            #x = self.patt(x_k = x_pre, x_q = x)
-            x = self.patt(x_q = x_pre, x_v = x)
-            x = x + x_pre
+
+            pre_img_x = self.pre_img_layer(pre_img)
+            pre_hm_x = self.pre_hm_layer(pre_hm)
+            pre_img_x_pos = self.pos_enc(pre_img_x)
+            x_pos = self.pos_enc(x)
+
+            heat = _nms(pre_hm, kernel=self.opt.nms_kernel)
+            scores, inds, clses, ys0, xs0 = _topk(heat, K=opt.K)
+            x_pre_feat = _tranpose_and_gather_feat(pre_img_x_pos, inds) # 
+
+            x = self.patt(x_q = x_pos, x_k = x_pre_feat)
+            x = x + pre_img_x + pre_hm_x
         else:
             if pre_img is not None:
                 x = x + self.pre_img_layer(pre_img)
@@ -652,3 +664,4 @@ class DLASeg(BaseModel):
         self.ida_up(y, 0, len(y))
 
         return [y[-1]]
+
