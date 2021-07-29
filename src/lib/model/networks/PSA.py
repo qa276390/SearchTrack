@@ -70,17 +70,17 @@ class PSA_p(nn.Module):
         input_x = input_x.view(batch, channel, height * width)
 
         # [N, 1, H, W]
-        context_mask = self.conv_q_right(x_q)
+        context_key = self.conv_q_right(x_q)
 
         # [N, 1, H*W]
-        context_mask = context_mask.view(batch, 1, height * width)
+        context_key = context_key.view(batch, 1, height * width)
 
         # [N, 1, H*W]
-        context_mask = self.softmax_right(context_mask)
+        context_key = self.softmax_right(context_key)
 
         # [N, IC, 1]
-        # context = torch.einsum('ndw,new->nde', input_x, context_mask)
-        context = torch.matmul(input_x, context_mask.transpose(1,2))
+        # context = torch.einsum('ndw,new->nde', input_x, context_key)
+        context = torch.matmul(input_x, context_key.transpose(1,2))
         # [N, IC, 1, 1]
         context = context.unsqueeze(-1)
 
@@ -190,17 +190,17 @@ class PSA_s(nn.Module):
         input_x = input_x.view(batch, channel, height * width)
 
         # [N, 1, H, W]
-        context_mask = self.conv_q_right(x)
+        context_key = self.conv_q_right(x)
 
         # [N, 1, H*W]
-        context_mask = context_mask.view(batch, 1, height * width)
+        context_key = context_key.view(batch, 1, height * width)
 
         # [N, 1, H*W]
-        context_mask = self.softmax_right(context_mask)
+        context_key = self.softmax_right(context_key)
 
         # [N, IC, 1]
-        # context = torch.einsum('ndw,new->nde', input_x, context_mask)
-        context = torch.matmul(input_x, context_mask.transpose(1, 2))
+        # context = torch.einsum('ndw,new->nde', input_x, context_key)
+        context = torch.matmul(input_x, context_key.transpose(1, 2))
 
         # [N, IC, 1, 1]
         context = context.unsqueeze(-1)
@@ -275,9 +275,8 @@ class PolarAtt(nn.Module):
         self.padding = (kernel_size-1)//2
 
         self.conv_q_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
-        self.conv_k_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
-        self.conv_v_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
-        self.conv_up = nn.Conv2d(self.inter_planes, self.planes, kernel_size=1, stride=1, padding=0, bias=False)
+        self.conv_k_right = nn.Conv1d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
+        self.conv_v_right = nn.Conv1d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
         self.softmax_right = nn.Softmax(dim=2)
         self.sigmoid = nn.Sigmoid()
 
@@ -298,19 +297,20 @@ class PolarAtt(nn.Module):
         input_x = self.conv_q_right(x_q)
 
         batch, channel, height, width = input_x.size()
-        batch, channel, M = x_k.size()
 
         # [N, IC, H*W]
         input_x = input_x.view(batch, channel, height * width)
 
         # [N, IC, M]
-        context_mask = self.conv_k_right(x_k)
+        context_key = self.conv_k_right(x_k) # x_k: (batch, n_channal, K)
+
+        _, _, M =  context_key.size()
 
         # [N, IC, M]
-        context_mask = context_mask.view(batch, channel, M)
+        context_key = context_key.view(batch, channel, M)
 
         # [N, H*W, M]
-        context = torch.matmul(input_x.transpose(1,2), context_mask)
+        context = torch.matmul(input_x.transpose(1,2), context_key)
 
         # [N, H*W, M]
         context = self.softmax_right(context)
@@ -319,10 +319,12 @@ class PolarAtt(nn.Module):
         value = self.conv_v_right(x_k)
 
         # [N, IC, M]
-        value = value.view(batch, channel, height * width)
+        value = value.view(batch, channel, M)
 
         # [N, IC, H*W]
         out = torch.matmul(value, context.transpose(1,2))
+
+        out = out.view(batch, channel, height, width)
 
         return out
 
@@ -330,7 +332,7 @@ class PolarAtt(nn.Module):
 
     def forward(self, x_q, x_k):
         # [N, C, H, W]
-        context_channel = self.spatial_pool(x_q, x_k) + x_q
+        context_channel = self.spatial_pool(x_q, x_k) 
         out = context_channel
 
         return out
