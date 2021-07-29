@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as model_zoo
 
 from .base_model import BaseModel
-from .PSA import PSA_p, PSA_s
+from .PSA import PSA_p, PSA_s, PolarAtt
 
 try:
     from .DCNv2.dcn_v2 import DCN
@@ -237,8 +237,8 @@ class DLA(nn.Module):
         self.opt = opt
         self.channels = channels
         self.num_classes = num_classes
-        if opt is not None and opt.psa:
-          self.psa = PSA_s(channels[0], channels[0])
+        if opt is not None and opt.patt:
+          self.patt = PolarAtt(channels[0], channels[0])
         self.base_layer = nn.Sequential(
             nn.Conv2d(3, channels[0], kernel_size=7, stride=1,
                       padding=3, bias=False),
@@ -309,13 +309,17 @@ class DLA(nn.Module):
     def forward(self, x, pre_img=None, pre_hm=None):
         y = []
         x = self.base_layer(x)
-        if pre_img is not None:
-            x = x + self.pre_img_layer(pre_img)
-        if pre_hm is not None:
-            x = x + self.pre_hm_layer(pre_hm)
 
-        if self.opt.psa:
-            x = self.psa(x)
+        if self.opt.patt and (pre_img is not None) and (pre_hm is not None):
+            x_pre = self.pre_img_layer(pre_img) + self.pre_hm_layer(pre_hm)
+            x = self.patt(x_k = x_pre, x_q = x)
+        else:
+            if pre_img is not None:
+                x = x + self.pre_img_layer(pre_img)
+            if pre_hm is not None:
+                x = x + self.pre_hm_layer(pre_hm)
+
+
         for i in range(6):
             x = getattr(self, 'level{}'.format(i))(x)
             y.append(x)
