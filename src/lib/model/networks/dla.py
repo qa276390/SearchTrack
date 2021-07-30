@@ -325,9 +325,9 @@ class DLA(nn.Module):
             heat = _nms(pre_hm, kernel=3)
             scores, inds, clses, ys0, xs0 = _topk(heat, K=self.opt.K)
             x_pre_feat = _tranpose_and_gather_feat(pre_img_x_pos, inds) # (batch, K, n_channal)
-            x = self.patt(x_q = x_pos, x_k = x_pre_feat.permute(0, 2, 1))
+            x_patt = self.patt(x_q = x_pos, x_k = x_pre_feat.permute(0, 2, 1))
 
-            x = x + pre_img_x + pre_hm_x
+            x = x + x_patt + pre_img_x + pre_hm_x
         else:
             if pre_img is not None:
                 x = x + self.pre_img_layer(pre_img)
