@@ -319,8 +319,8 @@ class DLA(nn.Module):
 
             pre_img_x = self.pre_img_layer(pre_img)
             pre_hm_x = self.pre_hm_layer(pre_hm)
-            pre_img_x_pos = self.pos_enc(pre_img_x)
-            x_pos = self.pos_enc(x)
+            pre_img_x_pos = self.pos_enc(pre_img_x) + pre_img_x
+            x_pos = self.pos_enc(x) + x
 
             heat = _nms(pre_hm, kernel=3)
             scores, inds, clses, ys0, xs0 = _topk(heat, K=self.opt.K)

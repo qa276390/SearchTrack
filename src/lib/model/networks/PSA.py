@@ -277,6 +277,7 @@ class PolarAtt(nn.Module):
         self.conv_q_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
         self.conv_k_right = nn.Conv1d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
         self.conv_v_right = nn.Conv1d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
+        self.conv_o_right = nn.Conv2d(self.inplanes, self.inter_planes, kernel_size=1, stride=stride, padding=0, bias=False)
         self.softmax_right = nn.Softmax(dim=2)
         self.sigmoid = nn.Sigmoid()
 
@@ -287,10 +288,12 @@ class PolarAtt(nn.Module):
         kaiming_init(self.conv_q_right, mode='fan_in')
         kaiming_init(self.conv_v_right, mode='fan_in')
         kaiming_init(self.conv_k_right, mode='fan_in')
+        kaiming_init(self.conv_o_right, mode='fan_in')
 
         self.conv_q_right.inited = True
         self.conv_v_right.inited = True
         self.conv_k_right.inited = True
+        self.conv_o_right.inited = True
 
 
     def spatial_pool(self, x_q, x_k): # channel-only
@@ -325,6 +328,8 @@ class PolarAtt(nn.Module):
         out = torch.matmul(value, context.transpose(1,2))
 
         out = out.view(batch, channel, height, width)
+
+        out = self.conv_o_right(out)
 
         return out
 
