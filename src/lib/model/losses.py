@@ -10,7 +10,7 @@ from __future__ import print_function
 
 import torch
 import torch.nn as nn
-from .utils import _tranpose_and_gather_feat, _nms, _topk
+from .utils import _tranpose_and_gather_feat, _nms, _topk, _sigmoid
 import torch.nn.functional as F
 from utils.image import draw_umich_gaussian
 
@@ -94,7 +94,8 @@ class FastFocalLoss(nn.Module):
     pos_loss = pos_loss.sum()
     if num_pos == 0:
       return - neg_loss
-    return - (pos_loss + neg_loss) / num_pos
+    ffloss =  - (pos_loss + neg_loss) / num_pos
+    return ffloss
 
 def _reg_loss(regr, gt_regr, mask):
   ''' L1 regression loss
@@ -191,61 +192,16 @@ def compute_rot_loss(output, target_bin, target_res, mask):
         loss_res += loss_sin2 + loss_cos2
     return loss_bin1 + loss_bin2 + loss_res
 
+def dice_coefficient(x, target):
+    eps = 1e-5
+    n_inst = x.size(0)
+    x = x.reshape(n_inst, -1)
+    target = target.reshape(n_inst, -1)
+    intersection = (x * target).sum(dim=1)
+    union = (x ** 2.0).sum(dim=1) + (target ** 2.0).sum(dim=1) + eps
+    loss = 1. - (2 * intersection / union)
+    return loss
 
-class SegDiceLoss(nn.Module):
-    def __init__(self,feat_channel):
-        super(SegDiceLoss, self).__init__()
-        self.feat_channel=feat_channel
-
-    def dice_loss(self, input, target):
-        smooth = 1.
-        iflat = input.contiguous().view(-1)
-        tflat = target.contiguous().view(-1)
-        intersection = (iflat * tflat).sum()
-        return 1 - ((2. * intersection + smooth) /((iflat*iflat).sum() + (tflat*tflat).sum() + smooth))
-
-    def forward(self, seg_feat, conv_weight, mask, ind, target):
-        mask_loss=0.
-        batch_size = seg_feat.size(0)
-        weight = _tranpose_and_gather_feat(conv_weight, ind)
-        #reg = _tranpose_and_gather_feat(reg, ind)
-        h,w = seg_feat.size(-2),seg_feat.size(-1)
-        x0,y0 = ind%w,ind/w
-        x = x0
-        y = y0
-        #x = x0.float() + reg[:, :, 0]
-        #y = y0.float() + reg[:, :, 1]
-        x_range = torch.arange(w).float().to(device=seg_feat.device)
-        y_range = torch.arange(h).float().to(device=seg_feat.device)
-        y_grid, x_grid = torch.meshgrid([y_range, x_range])
-        for i in range(batch_size):
-            num_obj = target[i].size(0)
-            conv1w,conv1b,conv2w,conv2b,conv3w,conv3b= \
-                torch.split(weight[i,:num_obj],[(self.feat_channel+2)*self.feat_channel,self.feat_channel,
-                                          self.feat_channel**2,self.feat_channel,
-                                          self.feat_channel,1],dim=-1)
-            y_rel_coord = (y_grid[None,None] - y[i,:num_obj].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).float())/128.
-            x_rel_coord = (x_grid[None,None] - x[i,:num_obj].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).float())/128.
-            feat = seg_feat[i][None].repeat([num_obj,1,1,1])
-            feat = torch.cat([feat,x_rel_coord, y_rel_coord],dim=1).view(1,-1,h,w)
-
-            conv1w=conv1w.contiguous().view(-1,self.feat_channel+2,1,1)
-            conv1b=conv1b.contiguous().flatten()
-            feat = F.conv2d(feat,conv1w,conv1b,groups=num_obj).relu()
-
-            conv2w=conv2w.contiguous().view(-1,self.feat_channel,1,1)
-            conv2b=conv2b.contiguous().flatten()
-            feat = F.conv2d(feat,conv2w,conv2b,groups=num_obj).relu()
-
-            conv3w=conv3w.contiguous().view(-1,self.feat_channel,1,1)
-            conv3b=conv3b.contiguous().flatten()
-            feat = F.conv2d(feat,conv3w,conv3b,groups=num_obj).sigmoid().squeeze()
-
-            true_mask = mask[i,:num_obj,None,None].float()
-
-            mask_loss+=self.dice_loss(feat*true_mask,target[i]*true_mask)
-
-        return mask_loss/batch_size
 
 class MTLoss(nn.Module):
     def __init__(self, heads):
@@ -262,3 +218,57 @@ class MTLoss(nn.Module):
           loss += losses[h] * torch.exp(-log_var) + log_var
         return loss
 
+class SchLoss(nn.Module):
+    def __init__(self,feat_channel, opt):
+        super(SchLoss, self).__init__()
+        self.feat_channel=feat_channel
+        self.hm_crit = FastFocalLoss(opt)
+
+    def forward(self, sch_feat, conv_weight, mask, pre_ind, target, ind, kmf_ind=None):
+        """
+        Arguments:
+          sch_feats, target: B x N x H x W
+          pre_ind, ind, mask: B x M
+        """
+        hm_loss=0.
+        batch_size = sch_feat.size(0)
+        weight = _tranpose_and_gather_feat(conv_weight, pre_ind)
+        h,w = sch_feat.size(-2), sch_feat.size(-1)
+        if kmf_ind is not None:
+          x,y = kmf_ind%w,kmf_ind/w
+        else:
+          x,y = pre_ind%w,pre_ind/w
+        x_range = torch.arange(w).float().to(device=sch_feat.device)
+        y_range = torch.arange(h).float().to(device=sch_feat.device)
+        hm = torch.zeros_like(target)
+        y_grid, x_grid = torch.meshgrid([y_range, x_range])
+        for i in range(batch_size):
+          num_obj = target[i].size(0)
+          conv1w,conv1b,conv2w,conv2b,conv3w,conv3b= \
+              torch.split(weight[i,:num_obj],[(self.feat_channel+2)*self.feat_channel,self.feat_channel,
+                                        self.feat_channel**2,self.feat_channel,
+                                        self.feat_channel,1],dim=-1)
+          y_rel_coord = (y_grid[None,None] - y[i,:num_obj].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).float())/128.
+          x_rel_coord = (x_grid[None,None] - x[i,:num_obj].unsqueeze(-1).unsqueeze(-1).unsqueeze(-1).float())/128.
+          feat = sch_feat[i][None].repeat([num_obj,1,1,1])
+          feat = torch.cat([feat,x_rel_coord, y_rel_coord],dim=1).view(1,-1,h,w)
+
+          conv1w=conv1w.contiguous().view(-1,self.feat_channel+2,1,1)
+          conv1b=conv1b.contiguous().flatten()
+          feat = F.conv2d(feat,conv1w,conv1b,groups=num_obj).relu()
+
+          conv2w=conv2w.contiguous().view(-1,self.feat_channel,1,1)
+          conv2b=conv2b.contiguous().flatten()
+          feat = F.conv2d(feat,conv2w,conv2b,groups=num_obj).relu()
+
+          conv3w=conv3w.contiguous().view(-1,self.feat_channel,1,1)
+          conv3b=conv3b.contiguous().flatten()
+          hm[i] = F.conv2d(feat,conv3w,conv3b,groups=num_obj).squeeze()
+
+        hm = _sigmoid(hm)
+        cat = torch.zeros_like(ind)
+        hm_loss = self.hm_crit(hm.view(-1, 1, h, w), target.view(-1, 1, h, w), ind.view(-1, 1), mask.view(-1, 1), cat.view(-1, 1))
+
+        #hm_loss = hm_loss * 0 if torch.sum(mask) <= 0 else hm_loss / torch.sum(mask) 
+
+        return hm_loss

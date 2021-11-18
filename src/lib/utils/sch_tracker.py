@@ -1,10 +1,12 @@
 import numpy as np
-from sklearn.utils.linear_assignment_ import linear_assignment
+#from sklearn.utils.linear_assignment_ import linear_assignment
+from scipy.optimize import linear_sum_assignment as linear_assignment
 from numba import jit
 import copy
+from .utils import np_iou, iou_score
 from .kalman_filter import KalmanBoxTracker
 
-class Tracker(object):
+class SchTracker(object):
   def __init__(self, opt):
     self.opt = opt
     self.reset()
@@ -27,40 +29,47 @@ class Tracker(object):
     self.id_count = 0
     self.tracks = []
 
-  def step(self, results, pre_results=None, public_det=None):
+  def step(self, results, track_results, public_det=None):
     N = len(results)
     M = len(self.tracks)
 
     dets = np.array(
-      [det['ct'] + det['tracking'] for det in results], np.float32) # N x 2
-    track_size = np.array([((track['bbox'][2] - track['bbox'][0]) * \
-      (track['bbox'][3] - track['bbox'][1])) \
-      for track in self.tracks], np.float32) # M
+      [det['bbox']  for det in results], np.float32) # N x 2
     track_cat = np.array([track['class'] for track in self.tracks], np.int32) # M
-    item_size = np.array([((item['bbox'][2] - item['bbox'][0]) * \
-      (item['bbox'][3] - item['bbox'][1])) \
-      for item in results], np.float32) # N
     item_cat = np.array([item['class'] for item in results], np.int32) # N
-    tracks = np.array(
-      [pre_det['ct'] for pre_det in self.tracks], np.float32) # M x 2
-    dist = (((tracks.reshape(1, -1, 2) - \
-              dets.reshape(-1, 1, 2)) ** 2).sum(axis=2)) # N x M
+    tracks = [] # [[(bbox_1, score_1)], [(bbox_2_1, score_2_1), (bbox_2_2, score_2_2)], ...]
+    trackings = []
+    for pre_det in self.tracks:
+      match = False
+      match_tracking = []
+      for tracking in track_results:
+        if pre_det['tracking_id'] == tracking['tracking_id']:
+          match = True
+          match_tracking.append((tracking['track_bbox'], tracking['track_score']))
+      if match:
+        tracks.append(match_tracking)
+      else:
+        tracks.append([(pre_det['bbox'], 0.5)])
+    scores = iou_score(dets, tracks)
+    dist = 1 - scores
+    dist = dist.reshape(N, M)
 
-    invalid = ((dist > track_size.reshape(1, M)) + \
-      (dist > item_size.reshape(N, 1)) + \
+    invalid = ((dist >= 0.99) + \
       (item_cat.reshape(N, 1) != track_cat.reshape(1, M))) > 0
-    #invalid =  (item_cat.reshape(N, 1) != track_cat.reshape(1, M)) > 0
     dist = dist + invalid * 1e18
-    
+
     if self.opt.hungarian:
       item_score = np.array([item['score'] for item in results], np.float32) # N
       dist[dist > 1e18] = 1e18
-      matched_indices = linear_assignment(dist)
+      rind, cind = linear_assignment(dist)
+      matched_indices = np.array([[r, c] for r, c in zip(rind, cind)], dtype=np.int32)
+      matched_indices = matched_indices.reshape(-1, 2)
     else:
-      matched_indices = greedy_assignment(copy.deepcopy(dist))
+      matched_indices = greedy_assignment_c(copy.deepcopy(dist))
+
     unmatched_dets = [d for d in range(dets.shape[0]) \
       if not (d in matched_indices[:, 0])]
-    unmatched_tracks = [d for d in range(tracks.shape[0]) \
+    unmatched_tracks = [d for d in range(len(tracks)) \
       if not (d in matched_indices[:, 1])]
     
     if self.opt.hungarian:
@@ -136,7 +145,7 @@ class Tracker(object):
     self.tracks = tracks
     return ret
 
-def greedy_assignment(dist):
+def greedy_assignment(dist): # is this correct?
   matched_indices = []
   if dist.shape[1] == 0:
     return np.array(matched_indices, np.int32).reshape(-1, 2)
@@ -145,4 +154,17 @@ def greedy_assignment(dist):
     if dist[i][j] < 1e16:
       dist[:, j] = 1e18
       matched_indices.append([i, j])
+  return np.array(matched_indices, np.int32).reshape(-1, 2)
+
+
+def greedy_assignment_c(dist): # is this correct?
+  matched_indices = []
+  if dist.shape[1] == 0 or dist.shape[0] == 0:
+    return np.array(matched_indices, np.int32).reshape(-1, 2)
+  while dist.min() < 1e18:
+    ind = np.unravel_index(np.argmin(dist, axis=None), dist.shape)
+    if dist[ind] < 1e16:
+      dist[:, ind[1]] = 1e18
+      dist[ind[0], :] = 1e18
+      matched_indices.append(list(ind))
   return np.array(matched_indices, np.int32).reshape(-1, 2)

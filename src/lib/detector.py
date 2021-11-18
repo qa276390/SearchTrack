@@ -11,13 +11,14 @@ import torch
 import math
 
 from model.model import create_model, load_model
-from model.decode import generic_decode
+from model.decode import GenericDecode
 from model.utils import flip_tensor, flip_lr_off, flip_lr
 from utils.image import get_affine_transform, affine_transform
-from utils.image import draw_umich_gaussian, gaussian_radius
+from utils.image import draw_umich_gaussian, gaussian_radius, draw_umich_gaussian_oval, gaussian_radius_center
 from utils.post_process import generic_post_process
 from utils.debugger import Debugger
 from utils.tracker import Tracker
+from utils.sch_tracker import SchTracker
 from dataset.dataset_factory import get_dataset
 
 import pycocotools.mask as mask_utils
@@ -52,8 +53,10 @@ class Detector(object):
     self.pre_images = None
     self.pre_image_ori = None
     self.age_images = []
-    self.tracker = Tracker(opt)
+    self.tracker = SchTracker(opt) if opt.sch_track else Tracker(opt)
     self.debugger = Debugger(opt=opt, dataset=self.trained_dataset)
+
+    self.decoder = GenericDecode(K=opt.K, opt=opt)
 
 
   def run(self, image_or_path_or_tensor, meta={}):
@@ -64,6 +67,7 @@ class Detector(object):
 
     # read image
     pre_processed = False
+    pid2track = None
     if isinstance(image_or_path_or_tensor, np.ndarray):
       image = image_or_path_or_tensor
     elif type(image_or_path_or_tensor) == type (''): 
@@ -78,6 +82,7 @@ class Detector(object):
     load_time += (loaded_time - start_time)
     
     detections = []
+    trackings = []
 
     # for multi-scale testing
     for scale in self.opt.test_scales:
@@ -98,22 +103,23 @@ class Detector(object):
       images = images.to(self.opt.device, non_blocking=self.opt.non_block_test)
 
       # initializing tracker
-      pre_hms, pre_inds = None, None
+      pre_hms, pre_inds, kmf_hms, sch_weights = None, None, None, None
       if self.opt.tracking:
         # initialize the first frame
         if self.pre_images is None:
-          print('Initialize tracking!')
           self.pre_images = images
           self.tracker.init_track(
             meta['pre_dets'] if 'pre_dets' in meta else [])
-        if self.opt.pre_hm:
+        if self.opt.pre_hm or self.opt.sch_track:
           # render input heatmap from tracker status
           # pre_inds is not used in the current version.
           # We used pre_inds for learning an offset from previous image to
           # the current image.
-          pre_images, pre_hms, pre_inds = self._get_additional_inputs(
-            self.tracker.tracks, meta, self.pre_images, self.age_images, with_hm=not self.opt.zero_pre_hm)
-          self.pre_images = pre_images
+          pre_hms, pre_inds, kmf_hms, track_ids, kmf_inds, sch_weights = self._get_additional_inputs(
+            self.tracker.tracks, meta, self.age_images, 
+            with_hm=not self.opt.zero_pre_hm, with_kmf=(self.opt.kmf_att or self.opt.kmf_ind), with_sch=self.opt.sch_eval)
+          
+          pid2track = {int(pre_ind.cpu().detach().numpy()): track_id for pre_ind, track_id in zip(pre_inds[0], track_ids[0])}
       
       pre_process_time = time.time()
       pre_time += pre_process_time - scale_start_time
@@ -122,26 +128,28 @@ class Detector(object):
       # output: the output feature maps, only used for visualizing
       # dets: output tensors after extracting peaks
       output, dets, forward_time = self.process(
-        images, self.pre_images, pre_hms, pre_inds, return_time=True)
+        images, self.pre_images, pre_hms, pre_inds, kmf_hms, kmf_inds, sch_weights, return_time=True)
       net_time += forward_time - pre_process_time
       decode_time = time.time()
       dec_time += decode_time - forward_time
       
       # convert the cropped and 4x downsampled output coordinate system
       # back to the input image coordinate system
-      result = self.post_process(dets, meta, scale)
+      result, track_result = self.post_process(dets, meta, scale, pid2track)
       post_process_time = time.time()
       post_time += post_process_time - decode_time
 
       detections.append(result)
+      trackings.append(track_result)
       if self.opt.debug >= 2:
         self.debug(
-          self.debugger, images, result, output, scale, 
+          self.debugger, images, dets, output, scale, 
           pre_images=self.pre_images if not self.opt.no_pre_img else None, 
-          pre_hms=pre_hms)
-
+          pre_hms=pre_hms, kmf_hms=kmf_hms)
     # merge multi-scale testing results
     results = self.merge_outputs(detections)
+    track_results = self.merge_track_outputs(trackings)
+
     torch.cuda.synchronize()
     end_time = time.time()
     merge_time += end_time - post_process_time
@@ -150,11 +158,11 @@ class Detector(object):
       # public detection mode in MOT challenge
       public_det = meta['cur_dets'] if self.opt.public_det else None
       # add tracking id to results
-      results = self.tracker.step(results, public_det) 
-      self.pre_images = images
+      results = self.tracker.step(results, track_results, public_det) 
       self.age_images.append(images.squeeze(0))
       if len(self.age_images) > max(self.opt.max_age):
         self.age_images.pop(0)
+      self.pre_images = images
 
     tracking_time = time.time()
     track_time += tracking_time - end_time
@@ -262,7 +270,7 @@ class Detector(object):
     return bbox
 
 
-  def _get_additional_inputs(self, tracks, meta, pre_images, age_images, with_hm=True):
+  def _get_additional_inputs(self, tracks, meta, age_images, with_hm=True, with_kmf=False, with_sch=False):
     '''
     Render input heatmap from previous trackings.
     '''
@@ -270,8 +278,12 @@ class Detector(object):
     inp_width, inp_height = meta['inp_width'], meta['inp_height']
     out_width, out_height = meta['out_width'], meta['out_height']
     input_hm = np.zeros((1, inp_height, inp_width), dtype=np.float32)
+    kmf_hm = np.zeros((1, inp_height, inp_width), dtype=np.float32)
 
     output_inds = []
+    track_ids = []
+    kmf_inds = []
+    sch_weights = []
     for track in tracks:
       if track['score'] < self.opt.pre_thresh[track['class']-1]: #or det['active'] == 0:
         continue
@@ -289,27 +301,70 @@ class Detector(object):
           ct = np.array(
             [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
         ct_int = ct.astype(np.int32)
-        if with_hm:
-          draw_umich_gaussian(input_hm[0], ct_int, radius)
         ct_out = np.array(
           [(bbox_out[0] + bbox_out[2]) / 2, 
            (bbox_out[1] + bbox_out[3]) / 2], dtype=np.int32)
         output_inds.append(ct_out[1] * out_width + ct_out[0])
-      if track['age'] > 1 and self.opt.paste_up:
-        track['segmentation'] = track['seg']
-        masks_to_be_paste = self.merge_masks_as_input([track], trans_input)
-        pre_images = copy_paste_with_seg_mask(pre_images.squeeze(0), age_images[-track['age']], masks_to_be_paste, blend=False)
-        pre_images = pre_images.unsqueeze(0)
+        track_ids.append(track['tracking_id'])
+        if with_sch:
+          sch_weights.append(track['sch_weight'])
+        if with_hm:
+          draw_umich_gaussian(input_hm[0], ct_int, radius)
+        if with_kmf:
+          if track['active'] >= self.opt.kmf_confirm_age:
+            p_bbox_ = track['kmf'].predict()[0]
+            p_bbox = self._trans_bbox(p_bbox_, trans_input, inp_width, inp_height)
+            p_h, p_w = p_bbox[3] - p_bbox[1], p_bbox[2] - p_bbox[0]
+            init = (track['active'] == 1)
+            if self.opt.guss_rad:
+              min_overlap = 0.2 if init else 0.6
+              conf = self.opt.init_conf if init else 1
+              p_radius = gaussian_radius_center((math.ceil(p_h), math.ceil(p_w)), min_overlap=0.2)
+            else:
+              p_radius = gaussian_radius((math.ceil(p_h), math.ceil(p_w)))
+            p_radius = max(0, int(p_radius))
+            p_ct_int = np.array(
+              [(p_bbox[0] + p_bbox[2]) / 2, (p_bbox[1] + p_bbox[3]) / 2], dtype=np.float32).astype(np.int32)
+            if (p_h > 0) and (p_w > 0) and (p_ct_int[0] > 0) and (p_ct_int[1]> 0) and (p_ct_int[0] < inp_width) and (p_ct_int[1] < inp_height):
+              if self.opt.guss_oval:
+                p_radius = p_radius if (self.opt.guss_rad and init) or (self.opt.guss_rad and self.opt.guss_rad_always) else 0
+                draw_umich_gaussian_oval(kmf_hm[0], p_ct_int, radius_h=h//2+p_radius, radius_w=w//2+p_radius)
+              else:
+                draw_umich_gaussian(kmf_hm[0], p_ct_int, p_radius)
+            # kmf_ind: trans to output
+            p_bbox_out = self._trans_bbox(p_bbox_, trans_output, out_width, out_height)
+            p_ct_out = np.array([(p_bbox_out[0] + p_bbox_out[2]) / 2, 
+                                (p_bbox_out[1] + p_bbox_out[3]) / 2], dtype=np.int32)
+            kmf_inds.append(p_ct_out[1] * out_width + p_ct_out[0])
+          else: # unconfirm kmf tracker
+            kmf_inds.append(ct_out[1] * out_width + ct_out[0])
 
     if with_hm:
       input_hm = input_hm[np.newaxis]
       if self.opt.flip_test:
         input_hm = np.concatenate((input_hm, input_hm[:, :, :, ::-1]), axis=0)
       input_hm = torch.from_numpy(input_hm).to(self.opt.device)
+    if with_kmf and self.opt.kmf_att:
+      if not self.opt.keep_att:
+        kmf_hm = kmf_hm * 0.5 + 0.5
+      kmf_hm = kmf_hm[np.newaxis]
+      if self.opt.flip_test:
+        kmf_hm = np.concatenate((kmf_hm, kmf_hm[:, :, :, ::-1]), axis=0)
+      kmf_hm = torch.from_numpy(kmf_hm).to(self.opt.device)
+    else:
+      kmf_hm = None
     
+    if with_kmf:
+      assert (len(output_inds) == len(kmf_inds))
+    num_pre = len(output_inds)
     output_inds = np.array(output_inds, np.int64).reshape(1, -1)
     output_inds = torch.from_numpy(output_inds).to(self.opt.device)
-    return pre_images, input_hm, output_inds
+    kmf_inds = np.array(kmf_inds, np.int64).reshape(1, -1)
+    kmf_inds = torch.from_numpy(kmf_inds).to(self.opt.device) if with_kmf else None
+    track_ids = np.array(track_ids, np.int64).reshape(1, -1)
+    sch_weights = np.array(sch_weights)[None, :]
+    sch_weights = torch.from_numpy(sch_weights).to(self.opt.device)
+    return input_hm, output_inds, kmf_hm, track_ids, kmf_inds, sch_weights
 
   def merge_masks_as_input(self, anns, trans_input):
       rles = [ann['segmentation'] for ann in anns]
@@ -370,18 +425,18 @@ class Detector(object):
 
 
   def process(self, images, pre_images=None, pre_hms=None,
-    pre_inds=None, return_time=False):
+    pre_inds=None, kmf_hms=None, kmf_inds=None, pre_weights=None, return_time=False):
     with torch.no_grad():
       torch.cuda.synchronize()
-      output = self.model(images, pre_images, pre_hms)[-1]
+      output = self.model(images, pre_images, pre_hms, kmf_hms)[-1]
       output = self._sigmoid_output(output)
-      output.update({'pre_inds': pre_inds})
+      output.update({'pre_inds': pre_inds, 'kmf_inds': kmf_inds, 'pre_weights': pre_weights})
       if self.opt.flip_test:
         output = self._flip_output(output)
       torch.cuda.synchronize()
       forward_time = time.time()
       
-      dets = generic_decode(output, K=self.opt.K, opt=self.opt)
+      dets = self.decoder.generic_decode(output)
       torch.cuda.synchronize()
       for k in dets:
         dets[k] = dets[k].detach().cpu().numpy()
@@ -390,11 +445,11 @@ class Detector(object):
     else:
       return output, dets
 
-  def post_process(self, dets, meta, scale=1):
-    dets = generic_post_process(
+  def post_process(self, dets, meta, scale=1, pid2track=None):
+    dets, tracks = generic_post_process(
       self.opt, dets, [meta['c']], [meta['s']],
       meta['out_height'], meta['out_width'], self.opt.num_classes,
-      [meta['calib']], meta['height'], meta['width'])
+      [meta['calib']], meta['height'], meta['width'], pid2track=pid2track)
     self.this_calib = meta['calib']
     if scale != 1:
       for i in range(len(dets[0])):
@@ -402,7 +457,10 @@ class Detector(object):
           if k in dets[0][i]:
             dets[0][i][k] = (np.array(
               dets[0][i][k], np.float32) / scale).tolist()
-    return dets[0]
+    if len(tracks) > 0:
+      return dets[0], tracks[0]
+    else:
+      return dets[0], []
 
   def merge_outputs(self, detections):
     assert len(self.opt.test_scales) == 1, 'multi_scale not supported!'
@@ -411,9 +469,17 @@ class Detector(object):
       if detections[0][i]['score'] > self.opt.out_thresh[detections[0][i]['class'] - 1]:
         results.append(detections[0][i])
     return results
+  
+  def merge_track_outputs(self, detections):
+    assert len(self.opt.test_scales) == 1, 'multi_scale not supported!'
+    results = []
+    for i in range(len(detections[0])):
+      if detections[0][i]['track_score'] > self.opt.sch_thresh:
+        results.append(detections[0][i])
+    return results
 
   def debug(self, debugger, images, dets, output, scale=1, 
-    pre_images=None, pre_hms=None):
+    pre_images=None, pre_hms=None, kmf_hms=None):
     img = images[0].detach().cpu().numpy().transpose(1, 2, 0)
     img = np.clip(((
       img * self.std + self.mean) * 255.), 0, 255).astype(np.uint8)
@@ -433,6 +499,26 @@ class Detector(object):
         pre_hm = debugger.gen_colormap(
           pre_hms[0].detach().cpu().numpy())
         debugger.add_blend_img(pre_img, pre_hm, 'pre_hm')
+      if kmf_hms is not None:
+        kmf_hm = debugger.gen_colormap(
+          (kmf_hms[0].detach().cpu().numpy() - 0.5)*2)
+        debugger.add_blend_img(img, kmf_hm, 'kmf_hm')
+        kmf_hm = debugger.gen_colormap(
+          (kmf_hms[0].detach().cpu().numpy() - 0.5)*2)
+        debugger.add_blend_img(pre_img, kmf_hm, 'kmf_hm_pre')
+
+    if 'tracking' in output and self.opt.show_arrowmap:
+      debugger.add_img(img, img_id='tracking_arrowmap')
+      debugger.add_arrows(output['tracking'], img_id='tracking_arrowmap')
+    if 'track_hms' in dets:
+      for i, hm in enumerate(dets['track_hms'][0]):
+        pred = debugger.gen_colormap(hm[None, :])
+        debugger.add_blend_img(img, pred, img_id=f'track_hm_{i}')
+        debugger.add_arrow(
+            dets['pre_cts'][0][i]*self.opt.down_ratio, (0, 0), img_id=f'track_hm_{i}')
+        if 'kmf_cts' in dets:
+          debugger.add_arrow(
+              dets['kmf_cts'][0][i]*self.opt.down_ratio, (0, 0), c=(255, 255, 0),img_id=f'track_hm_{i}')
 
 
   def show_results(self, debugger, image, results):

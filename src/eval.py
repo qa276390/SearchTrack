@@ -131,6 +131,7 @@ def save_and_exit(opt, out=None, results=None, out_name='default', start_epoch='
   if (results is not None):
     save_path =  os.path.join(save_dir, '{}.json'.format(out_name))
     print('saving results to', save_path)
+    results.pop('sch_weight', None)
     json.dump(_to_list(copy.deepcopy(results)), 
               open(save_path, 'w'))
   if 'seg' in opt.task and 'tracking' in opt.task:
@@ -161,6 +162,8 @@ def _to_list(results):
       for k in results[img_id][t]:
         if isinstance(results[img_id][t][k], (np.ndarray, np.float32)):
           results[img_id][t][k] = results[img_id][t][k].tolist()
+        if 'kmf' in k:
+          results[img_id][t][k] = results[img_id][t][k].get_state().tolist()
   return results
 
 if __name__ == '__main__':

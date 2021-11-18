@@ -11,8 +11,8 @@ from model.data_parallel import DataParallel
 from utils.utils import AverageMeter
 
 from model.losses import FastFocalLoss, RegWeightedL1Loss
-from model.losses import BinRotLoss, WeightedBCELoss, SegDiceLoss, MTLoss
-from model.decode import generic_decode
+from model.losses import BinRotLoss, WeightedBCELoss, MTLoss
+from model.decode import GenericDecode, CondInst, SchTrack
 from model.utils import _sigmoid, flip_tensor, flip_lr_off, flip_lr
 from utils.debugger import Debugger
 from utils.post_process import generic_post_process
@@ -31,7 +31,9 @@ class GenericLoss(torch.nn.Module):
     if 'nuscenes_att' in opt.heads:
       self.crit_nuscenes_att = WeightedBCELoss()
     if 'seg' in opt.heads:
-      self.crit_seg = SegDiceLoss(opt.seg_feat_channel)
+      self.crit_seg = CondInst(opt.seg_feat_channel)
+    if 'sch' in opt.heads:
+      self.crit_sch = SchTrack(opt.sch_feat_channel, opt=opt)
     #if opt.mtl:
     self.mtl_criterion = MTLoss(opt.heads)
     self.opt = opt
@@ -47,7 +49,7 @@ class GenericLoss(torch.nn.Module):
 
   def forward(self, outputs, batch):
     opt = self.opt
-    losses = {head: 0 for head in opt.heads}
+    losses = {head: torch.tensor(0.).to(batch['hm'].device) for head in opt.heads}
     for s in range(opt.num_stacks):
       output = outputs[s]
       output = self._sigmoid_output(output)
@@ -57,8 +59,15 @@ class GenericLoss(torch.nn.Module):
           batch['mask'], batch['cat']) / opt.num_stacks
       if 'seg' in output:
         losses['seg'] += self.crit_seg(output['seg'],output['conv_weight'], 
-                                      batch['mask'], batch['ind'], batch['seg_mask']) / opt.num_stacks
-      
+                                      batch['ind'], batch['mask'], batch['seg_mask']) / opt.num_stacks
+      if 'sch' in output:
+        if opt.kmf_ind:
+          losses['sch'] += self.crit_sch(output['sch'], output['sch_weight'], 
+                                        ind=batch['ind'], pre_ind=batch['pre_ind'], kmf_ind=batch['kmf_ind'], mask=batch['pre_mask'], target=batch['hm_track']) / opt.num_stacks
+        else:
+          losses['sch'] += self.crit_sch(output['sch'], output['sch_weight'], 
+                                        ind=batch['ind'], pre_ind=batch['pre_ind'], mask=batch['pre_mask'], target=batch['hm_track']) / opt.num_stacks
+
       regression_heads = [
         'reg', 'wh', 'tracking', 'ltrb', 'ltrb_amodal', 'hps', 
         'dep', 'dim', 'amodel_offset', 'velocity']
@@ -97,6 +106,13 @@ class GenericLoss(torch.nn.Module):
     
     return losses['tot'], losses
 
+# def update_batch(batch):
+#   batch_size = ind.size(0)
+#   ind = batch['ind'] # B x N
+#   batch["im_inds"] = [
+#             ind.new_ones(ind.size(0), dtype=torch.long) * i for i in range(len(batch_size))
+#         ]
+
 
 class ModleWithLoss(torch.nn.Module):
   def __init__(self, model, loss):
@@ -107,7 +123,9 @@ class ModleWithLoss(torch.nn.Module):
   def forward(self, batch):
     pre_img = batch['pre_img'] if 'pre_img' in batch else None
     pre_hm = batch['pre_hm'] if 'pre_hm' in batch else None
-    outputs = self.model(batch['image'], pre_img, pre_hm)
+    kmf_att = batch['kmf_att'] if 'kmf_att' in batch else None
+    #_update_batch(batch)
+    outputs = self.model(batch['image'], pre_img, pre_hm, kmf_att)
     loss, loss_stats = self.loss(outputs, batch)
     return outputs[-1], loss, loss_stats
 
@@ -120,6 +138,9 @@ class Trainer(object):
     self.model_with_loss = ModleWithLoss(model, self.loss)
     ts = datetime.datetime.now().strftime("%m%d-%H%M")
     self.writer = SummaryWriter(f'/home/master/08/vtsai01/CenMOTS/runs/{opt.task}-{opt.exp_id}-{ts}') if tb_writer else None
+
+    if opt.debug > 0:
+      self.decoder = GenericDecode(K=opt.K, opt=opt)
 
   def set_device(self, gpus, chunk_sizes, device):
     if len(gpus) > 1:
@@ -204,10 +225,7 @@ class Trainer(object):
     return ret, results
   
   def _get_losses(self, opt):
-    loss_order = ['hm', 'wh', 'reg', 'ltrb', 'hps', 'hm_hp', \
-      'hp_offset', 'dep', 'dim', 'rot', 'amodel_offset', \
-      'ltrb_amodal', 'tracking', 'nuscenes_att', 'velocity', 'seg']
-    loss_states = ['tot'] + [k for k in loss_order if k in opt.heads]
+    loss_states = ['tot'] + [k for k in opt.loss_order if k in opt.heads]
     loss = GenericLoss(opt)
     return loss_states, loss
 
@@ -215,7 +233,11 @@ class Trainer(object):
     opt = self.opt
     if 'pre_hm' in batch:
       output.update({'pre_hm': batch['pre_hm']})
-    dets = generic_decode(output, K=opt.K, opt=opt)
+    if 'pre_ind' in batch:
+      output.update({'pre_inds': batch['pre_ind']})
+    if 'kmf_ind' in batch and self.opt.kmf_ind:
+      output.update({'kmf_inds': batch['kmf_ind']})
+    dets = self.decoder.generic_decode(output)
     for k in dets:
       dets[k] = dets[k].detach().cpu().numpy()
     dets_gt = batch['meta']['gt_det']
@@ -235,10 +257,16 @@ class Trainer(object):
           pre_img * dataset.std + dataset.mean) * 255), 0, 255).astype(np.uint8)
         debugger.add_img(pre_img, 'pre_img_pred')
         debugger.add_img(pre_img, 'pre_img_gt')
+
+
         if 'pre_hm' in batch:
           pre_hm = debugger.gen_colormap(
             batch['pre_hm'][i].detach().cpu().numpy())
           debugger.add_blend_img(pre_img, pre_hm, 'pre_hm')
+      if 'kmf_att' in batch:
+        kmf_att = debugger.gen_colormap(
+          (batch['kmf_att'][i].detach().cpu().numpy() - 0.5) * 2)
+        debugger.add_blend_img(img, kmf_att, 'kmf_att')
 
       debugger.add_img(img, img_id='out_pred')
       if 'ltrb_amodal' in opt.heads:
@@ -248,7 +276,6 @@ class Trainer(object):
       # Predictions
       for k in range(len(dets['scores'][i])):
         if dets['scores'][i, k] > opt.vis_thresh:
-
           if 'seg' in dets:
             debugger.add_coco_seg(
               dets['seg'][i, k] , dets['clses'][i, k],
@@ -257,6 +284,7 @@ class Trainer(object):
             debugger.add_coco_bbox(
               dets['bboxes'][i, k] * opt.down_ratio, dets['clses'][i, k],
               dets['scores'][i, k], img_id='out_pred')
+          
 
           if 'ltrb_amodal' in opt.heads:
             debugger.add_coco_bbox(
@@ -274,7 +302,23 @@ class Trainer(object):
             debugger.add_arrow(
               dets['cts'][i][k] * opt.down_ratio, 
               dets['tracking'][i][k] * opt.down_ratio, img_id='pre_img_pred')
-
+      
+      if 'track_hms' in dets:
+        for idx, (gt_hm, hm) in enumerate(zip(batch['hm_track'][0], dets['track_hms'][0])):
+          if batch['pre_mask'][0][idx] > 0:
+            pred_map = debugger.gen_colormap(hm[None, :])
+            gt_map = debugger.gen_colormap(gt_hm.detach().cpu().numpy()[None, :])
+            debugger.add_blend_img(img, pred_map, img_id=f'track_hm_{idx}')
+            debugger.add_blend_img(img, gt_map, img_id=f'track_hm_{idx}_gt')
+            debugger.add_arrow(
+              dets['pre_cts'][0][idx]*opt.down_ratio, (0.5, 0.5), img_id=f'track_hm_{idx}')
+            debugger.add_arrow(
+              dets['pre_cts'][0][idx]*opt.down_ratio, (0.5, 0.5), img_id=f'track_hm_{idx}_gt')
+            if opt.kmf_ind:
+              debugger.add_arrow(
+              batch['kmf_cts'][0][idx]*opt.down_ratio, (0, 0), c=(255, 255, 0), img_id=f'track_hm_{idx}') 
+              debugger.add_arrow(
+              batch['kmf_cts'][0][idx]*opt.down_ratio, (0, 0), c=(255, 255, 0), img_id=f'track_hm_{idx}_gt') 
       # Ground truth
       debugger.add_img(img, img_id='out_gt')
       for k in range(len(dets_gt['scores'][i])):
@@ -285,7 +329,7 @@ class Trainer(object):
 
           if 'ltrb_amodal' in opt.heads:
             debugger.add_coco_bbox(
-              dets_gt['bboxes_amodal'][i, k] * opt.down_ratio, 
+              dets_gt['ltrb_amodal'][i, k] * opt.down_ratio, 
               dets_gt['clses'][i, k],
               dets_gt['scores'][i, k], img_id='out_gt_amodal')
 

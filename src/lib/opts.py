@@ -83,6 +83,7 @@ class opts(object):
     self.parser.add_argument('--tango_color', action='store_true')
     self.parser.add_argument('--only_show_dots', action='store_true')
     self.parser.add_argument('--show_trace', action='store_true')
+    self.parser.add_argument('--show_arrowmap', action='store_true')
 
     # model
     self.parser.add_argument('--arch', default='dla_34', 
@@ -108,6 +109,19 @@ class opts(object):
     self.parser.add_argument('--efficient_level', type=int, default=0)
     self.parser.add_argument('--prior_bias', type=float, default=-4.6) # -2.19
     self.parser.add_argument('--mots_use_all_head', action='store_true')
+    self.parser.add_argument('--head_DCN', action='store_true')
+    self.parser.add_argument('--kmf_att', action='store_true')
+    self.parser.add_argument('--kmf_ind', action='store_true')
+    self.parser.add_argument('--kmf_layer', action='store_true')
+    self.parser.add_argument('--guss_oval', action='store_true')
+    self.parser.add_argument('--kmf_append', action='store_true')
+    self.parser.add_argument('--kmf_pit', action='store_true')
+    self.parser.add_argument('--keep_att', action='store_true')
+    self.parser.add_argument('--guss_rad', action='store_true')
+    self.parser.add_argument('--guss_rad_always', action='store_true')
+    self.parser.add_argument('--kmf_layer_out', action='store_true')
+
+
 
     # input
     self.parser.add_argument('--input_res', type=int, default=-1, 
@@ -191,6 +205,7 @@ class opts(object):
                              help='different strategy when handling segmentation mask disjoint: '
                                   'area | score | y_pos | class')
     self.parser.add_argument('--nms_kernel', type=int, default=3)
+    self.parser.add_argument('--kmf_confirm_age', type=int, default=0)
 
     # dataset
     self.parser.add_argument('--not_rand_crop', action='store_true',
@@ -219,8 +234,7 @@ class opts(object):
     self.parser.add_argument('--rand_erase_seg_ratio', type=float, default=0.2)
     self.parser.add_argument('--seg_center', action='store_true',
                              help='use center of mass of segmentation mask instead of bbox center')
-    self.parser.add_argument('--copy_and_paste', type=float, default=0.0)
-    self.parser.add_argument('--pre_paste', type=float, default=1.0)
+    self.parser.add_argument('--one_way_pre_data', action='store_true')
 
     # Tracking
     self.parser.add_argument('--tracking', action='store_true')
@@ -240,9 +254,24 @@ class opts(object):
     self.parser.add_argument('--no_pre_img', action='store_true')
     self.parser.add_argument('--zero_tracking', action='store_true')
     self.parser.add_argument('--hungarian', action='store_true')
-    self.parser.add_argument('--max_age', type=str, default="-1") # alive thershold when inference
-    self.parser.add_argument('--num_pre_data', type=int, default=3) # when training
-    self.parser.add_argument('--paste_up', action='store_true')
+    self.parser.add_argument('--max_age', type=str, default="2") # tracker alive thershold when inference
+    self.parser.add_argument('--num_pre_data', type=int, default=1) # when training 
+    self.parser.add_argument('--att_hm_disturb', type=float, default=0)
+    self.parser.add_argument('--att_lost_disturb', type=float, default=0)
+    self.parser.add_argument('--att_fp_disturb', type=float, default=0)
+    self.parser.add_argument('--att_disturb_dist', type=float, default=0.05)
+    self.parser.add_argument('--att_track_lost_disturb', type=float, default=0)
+    self.parser.add_argument('--init_conf', type=float, default=0.6)
+
+    # Searching
+    self.parser.add_argument('--sch_track', action='store_true')
+    self.parser.add_argument('--sch_eval', action='store_true')
+    self.parser.add_argument('--sch_feat_channel', default=16,type=int, help='.')
+    self.parser.add_argument('--sch_weight', default= 1., type=float, help='')
+    self.parser.add_argument('--sch_thresh', type=float, default=0.3)
+    self.parser.add_argument('--track_K', type=int, default=1,
+                             help='max number of track proposal.') 
+
 
     # CondInst
     self.parser.add_argument('--seg_feat_channel', default=8,type=int, help='.')
@@ -396,15 +425,19 @@ class opts(object):
     opt.heads = {'hm': opt.num_classes, 'reg': 2, 'wh': 2}
 
     if 'tracking' in opt.task:
-      opt.heads.update({'tracking': 2})
-
+      if opt.sch_track:
+        opt.heads.update({'sch': opt.sch_feat_channel,
+                          'sch_weight': 2*opt.sch_feat_channel**2 + 5*opt.sch_feat_channel + 1})
+      else:
+        opt.heads.update({'tracking': 2})
+      
     if 'seg' in opt.task:
       opt.heads.update({
         'seg': opt.seg_feat_channel,
         'conv_weight': 2*opt.seg_feat_channel**2 + 5*opt.seg_feat_channel + 1,
         })
       if not opt.mots_use_all_head:
-        opt.wh_weight = 0
+        #opt.wh_weight = 0
         opt.off_weight = 0
     if 'ddd' in opt.task:
       opt.heads.update({'dep': 1, 'rot': 8, 'dim': 3, 'amodel_offset': 2})
@@ -435,14 +468,18 @@ class opts(object):
                    'nuscenes_att': opt.nuscenes_att_weight,
                    'velocity': opt.velocity_weight,
                    'seg': opt.seg_weight,
-                   'conv_weight': -1 }
+                   'conv_weight': -1,
+                   'sch': opt.sch_weight,
+                   'sch_weight': -1 }
     opt.weights = {head: weight_dict[head] for head in opt.heads}
     for head in opt.weights:
       if opt.weights[head] == 0:
         del opt.heads[head]
     opt.head_conv = {head: [opt.head_conv \
       for i in range(opt.num_head_conv if head != 'reg' else 1)] for head in opt.heads}
-    
+    opt.loss_order = ['hm', 'wh', 'reg', 'ltrb', 'hps', 'hm_hp', \
+      'hp_offset', 'dep', 'dim', 'rot', 'amodel_offset', \
+      'ltrb_amodal', 'tracking', 'nuscenes_att', 'velocity', 'seg', 'sch']
     print('input h w:', opt.input_h, opt.input_w)
     print('heads', opt.heads)
     print('weights', opt.weights)

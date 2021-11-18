@@ -233,6 +233,7 @@ class DLA(nn.Module):
                  block=BasicBlock, residual_root=False, linear_root=False,
                  opt=None):
         super(DLA, self).__init__()
+        self.opt = opt
         self.channels = channels
         self.num_classes = num_classes
         self.base_layer = nn.Sequential(
@@ -259,19 +260,16 @@ class DLA(nn.Module):
                       padding=3, bias=False),
             nn.BatchNorm2d(channels[0], momentum=BN_MOMENTUM),
             nn.ReLU(inplace=True))
+
         if opt.pre_hm:
             self.pre_hm_layer = nn.Sequential(
             nn.Conv2d(1, channels[0], kernel_size=7, stride=1,
                     padding=3, bias=False),
             nn.BatchNorm2d(channels[0], momentum=BN_MOMENTUM),
             nn.ReLU(inplace=True))
-        # for m in self.modules():
-        #     if isinstance(m, nn.Conv2d):
-        #         n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-        #         m.weight.data.normal_(0, math.sqrt(2. / n))
-        #     elif isinstance(m, nn.BatchNorm2d):
-        #         m.weight.data.fill_(1)
-        #         m.bias.data.zero_()
+        
+
+
 
     def _make_level(self, block, inplanes, planes, blocks, stride=1):
         downsample = None
@@ -302,13 +300,16 @@ class DLA(nn.Module):
             inplanes = planes
         return nn.Sequential(*modules)
 
-    def forward(self, x, pre_img=None, pre_hm=None):
+    def forward(self, x, pre_img=None, pre_hm=None, kmf_att=None):
         y = []
         x = self.base_layer(x)
-        if pre_img is not None:
+        
+        if pre_img is not None: # (b, n, c, h, w)
             x = x + self.pre_img_layer(pre_img)
         if pre_hm is not None:
             x = x + self.pre_hm_layer(pre_hm)
+
+
         for i in range(6):
             x = getattr(self, 'level{}'.format(i))(x)
             y.append(x)
@@ -628,8 +629,8 @@ class DLASeg(BaseModel):
 
         return [y[-1]]
 
-    def imgpre2feats(self, x, pre_img=None, pre_hm=None):
-        x = self.base(x, pre_img, pre_hm)
+    def imgpre2feats(self, x, pre_img=None, pre_hm=None, kmf_att=None):
+        x = self.base(x, pre_img, pre_hm, kmf_att)
         x = self.dla_up(x)
 
         y = []

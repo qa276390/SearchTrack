@@ -29,7 +29,7 @@ def get_alpha(rot):
   return alpha1 * idx + alpha2 * (1 - idx)
 
 def generic_post_process(
-  opt, dets, c, s, h, w, num_classes, calibs=None, height=-1, width=-1):
+  opt, dets, c, s, h, w, num_classes, calibs=None, height=-1, width=-1, pid2track=None):
   """
     h: out_height
     w: out_width
@@ -71,7 +71,9 @@ def generic_post_process(
         item['seg']['counts'] = item['seg']['counts'].decode("utf-8")
         if opt.wh_weight <= 0:
           item['bbox'] = _coco_box_to_bbox(mask_utils.toBbox(item['seg']))
-
+      
+      if 'sch_weights' in dets:
+        item['sch_weight'] = dets['sch_weights'][i][j]
 
       if 'hps' in dets:
         pts = transform_preds_with_trans(
@@ -101,6 +103,7 @@ def generic_post_process(
         item['loc'], item['rot_y'] = ddd2locrot(
           ct, item['alpha'], item['dim'], item['dep'], calibs[i])
       
+ 
       preds.append(item)
 
     if 'nuscenes_att' in dets:
@@ -116,6 +119,22 @@ def generic_post_process(
       preds = make_disjoint(preds, strategy)
 
     ret.append(preds)
-  
-
-  return ret
+  pre_ret = []
+  if 'track_scores' in dets:
+    for i in range(len(dets['track_scores'])):
+      track_preds = []
+      trans = get_affine_transform(
+        c[i], s[i], 0, (w, h), inv=1).astype(np.float32)
+      for j in range(len(dets['track_scores'][i])):
+        for k in range(len(dets['track_scores'][i][j])):
+          item = {}
+          item['track_score'] = dets['track_scores'][i][j][k]
+          if pid2track is not None:
+            item['tracking_id'] = pid2track[dets['pre_inds'][i][j]]
+          if 'track_bboxes' in dets:
+            bbox = transform_preds_with_trans(
+              dets['track_bboxes'][i][j][k].reshape(2, 2), trans).reshape(4)
+            item['track_bbox'] = bbox
+          track_preds.append(item)
+    pre_ret.append(track_preds)
+  return ret, pre_ret

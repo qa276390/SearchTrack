@@ -64,3 +64,53 @@ def make_disjoint(objects, strategy):
 
 
     return objects_disjoint
+
+
+def np_iou(box, boxes):
+    """
+    Calculate IOU between a bounding box and a set of bounding boxes.
+    :param box: [x1,y1,x2,y2]
+    :param boxes:[[x1,y1,x2,y2],[x1,y1,x2,y2],[x1,y1,x2,y2]]
+    :return: corresponding IOU values
+    """
+    box = np.array(box)
+    boxes = np.array(boxes)
+    if len(boxes)  == 0:
+        return np.array([])
+    ww = np.maximum(np.minimum(box[2], boxes[:, 2]) 
+                    - np.maximum(box[0], boxes[:, 0]), 0)
+    hh = np.maximum(np.minimum(box[3], boxes[:, 3]) -
+                    np.maximum(box[1], boxes[:, 1]), 0)
+    uu = (box[2] - box[0]) * (box[3] - box[1]) + (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1]+1e-8)
+    return ww * hh / (uu - ww * hh)
+
+
+def np_ious(boxes1, boxes2):
+   
+    results = []
+    for b in boxes1:
+        results.append(np_iou(b, boxes2))
+    return np.array(results)
+
+def iou_score(dets, tracks):
+    """
+        :param tracks: [[(bbox_1, score_1)], [(bbox_2_1, score_2_1), (bbox_2_2, score_2_2)], ...]      M x K x 4
+        :param dets: [[x1,y1,x2,y2],[x1,y1,x2,y2],[x1,y1,x2,y2], ....]                                 N x 4
+
+        :return N x M
+
+    """
+    results = []
+    for ts in tracks:
+        ratings = []
+        for prop in ts:
+            bbox, score = prop
+            ious = np_iou(bbox, dets)
+            ious[ious < 0.01] = 0
+
+            ratings.append(ious*score)
+
+        results.append(np.array(ratings).max(axis=0))
+    results = np.array(results) # M x N
+    results = np.swapaxes(results, 0, 1) if len(results.shape) > 1 else results # N x M
+    return results
