@@ -19,7 +19,7 @@ if __name__ == '__main__':
     data_path = DATA_PATH + (split if not HALF_VIDEO else 'train')
     out_path = OUT_PATH + '{}.json'.format(split)
     out = {'images': [], 'annotations': [], 
-           'categories': [{'id': 1, 'name': 'pedestrain'}],
+           'categories': [{'id': 2, 'name': 'Pedestrain'}, {'id': 10, 'name': 'DoneCare'}],
            'videos': []}
     seqs = os.listdir(data_path)
     image_cnt = 0

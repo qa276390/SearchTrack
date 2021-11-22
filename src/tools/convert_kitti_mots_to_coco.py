@@ -16,27 +16,27 @@ CREATE_HALF_LABEL = False
 DEBUG = False
 
 '''
-#Values    Name      Description
-----------------------------------------------------------------------------
-   1    frame        Frame within the sequence where the object appearers
-   1    track id     Unique tracking id of this object within this sequence
-   1    type         Describes the type of object: 'Car', 'Van', 'Truck',
-                     'Pedestrian', 'Person_sitting', 'Cyclist', 'Tram',
-                     'Misc' or 'DontCare'
-   1    truncated    Integer (0,1,2) indicating the level of truncation.
-                     Note that this is in contrast to the object detection
-                     benchmark where truncation is a float in [0,1].
-   1    occluded     Integer (0,1,2,3) indicating occlusion state:
-                     0 = fully visible, 1 = partly occluded
-                     2 = largely occluded, 3 = unknown
-   1    alpha        Observation angle of object, ranging [-pi..pi]
-   4    bbox         2D bounding box of object in the image (0-based index):
-                     contains left, top, right, bottom pixel coordinates
-   3    dimensions   3D object dimensions: height, width, length (in meters)
-   3    location     3D object location x,y,z in camera coordinates (in meters)
-   1    rotation_y   Rotation ry around Y-axis in camera coordinates [-pi..pi]
-   1    score        Only for results: Float, indicating confidence in
-                     detection, needed for p/r curves, higher is better.
+# Class ID
+car 1
+pedestrian 2
+
+# Format
+time_frame id class_id img_height img_width rle
+
+An example line from a txt file:
+
+52 1005 1 375 1242 WSV:2d;1O10000O10000O1O100O100O1O100O1000000000000000O100O102N5K00O1O1N2O110OO2O001O1NTga3
+
+Which means
+
+time frame 52 
+object id 1005 (meaning class id is 1, i.e. car and instance id is 5) 
+class id 1 
+image height 375 
+image width 1242 
+rle WSV:2d;1O10000O10000O1O100O100O1O100O1000000000000000O100O...1O1N 
+
+
 '''
 
 

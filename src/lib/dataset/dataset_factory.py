@@ -17,6 +17,7 @@ from .datasets.crowdhuman import CrowdHuman
 from .datasets.kitti_tracking import KITTITracking
 from .datasets.kitti_tracking_custom import KITTITrackingCustom
 from .datasets.kitti_mots import KITTIMOTS
+from .datasets.mots import MOTS
 from .datasets.custom_dataset import CustomDataset
 
 dataset_factory = {
@@ -30,6 +31,7 @@ dataset_factory = {
   'kitti_tracking': KITTITracking,
   'kitti_tracking_custom': KITTITrackingCustom,
   'kitti_mots': KITTIMOTS,
+  'mots': MOTS,
 }
 
 
