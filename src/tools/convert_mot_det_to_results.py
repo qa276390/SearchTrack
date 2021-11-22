@@ -2,17 +2,19 @@ import json
 import numpy as np
 import os
 from collections import defaultdict
-split = 'val_half'
+dataset_version = 'train'
+split = 'test' if not 'train' in dataset_version else 'train'
 
-DET_PATH = '../../data/mot17/'
-ANN_PATH = '../../data/mot17/annotations/{}.json'.format(split)
+DET_PATH = os.path.join('../../data/mot17', split)
+ANN_PATH = '../../data/mot17/annotations/{}.json'.format(dataset_version)
 OUT_DIR = '../../data/mot17/results/'
-OUT_PATH = OUT_DIR + '{}_det.json'.format(split)
+OUT_PATH = OUT_DIR + '{}_det.json'.format(dataset_version)
 
 if __name__ == '__main__':
   if not os.path.exists(OUT_DIR):
     os.mkdir(OUT_DIR)
-  seqs = [s for s in os.listdir(DET_PATH) if '_det' in s]
+  seqs = [s for s in os.listdir(DET_PATH)]
+  print(seqs)
   data = json.load(open(ANN_PATH, 'r'))
   images = data['images']
   image_to_anns = defaultdict(list)
@@ -27,8 +29,9 @@ if __name__ == '__main__':
     else:
       ann_path = seq_path + 'det/det.txt'
       frame_base = 0
-    if not IS_THIRD_PARTY:
-      anns = np.loadtxt(ann_path, dtype=np.float32, delimiter=',')
+   
+    anns = np.loadtxt(ann_path, dtype=np.float32, delimiter=',')
+    print(len(anns))
     for i in range(len(anns)):
       frame_id = int(anns[i][0])
       file_name = '{}/img1/{:06d}.jpg'.format(seq, frame_id + frame_base)

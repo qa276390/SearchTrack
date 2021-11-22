@@ -207,7 +207,7 @@ class Detector(object):
         inp_width = self.opt.fix_short
       c = np.array([width / 2, height / 2], dtype=np.float32)
       s = np.array([width, height], dtype=np.float32)
-    elif self.opt.fix_res:
+    elif self.opt.fix_res and (not self.opt.no_enlarge  or height > self.opt.input_h):
       inp_height, inp_width = self.opt.input_h, self.opt.input_w
       c = np.array([new_width / 2., new_height / 2.], dtype=np.float32)
       s = max(height, width) * 1.0

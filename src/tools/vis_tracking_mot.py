@@ -7,7 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from tqdm import tqdm
 
-GT_PATH = '../../data/mot17/train/'
+GT_PATH = '../../data/mot17/test/'
 IMG_PATH = GT_PATH
 SAVE_VIDEO = True
 RESIZE = 2
@@ -41,9 +41,9 @@ if __name__ == '__main__':
   for seq in sorted(seqs):
     video = None
     print('seq', seq)
-    if 'FRCNN' not in seq:
-      print('skip')
-      continue
+    #if 'FRCNN' not in seq:
+    #  print('skip')
+    #  continue
     # if len(sys.argv) > 2 and not sys.argv[2] in seq:
     #   continue
     if '.DS_Store' in seq:

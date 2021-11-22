@@ -61,7 +61,6 @@ def prefetch_test(opt):
   split = 'val' if not opt.trainval else 'test'
   dataset = Dataset(opt, split)
   detector = Detector(opt)
-  
   if opt.load_results != '':
     load_results = json.load(open(opt.load_results, 'r'))
     for img_id in load_results:
@@ -87,7 +86,7 @@ def prefetch_test(opt):
   for ind, (img_id, pre_processed_images) in enumerate(data_loader):
     if ind >= num_iters:
       break
-    if opt.tracking and ('is_first_frame' in pre_processed_images):
+    if opt.tracking and ('is_first_frame' in pre_processed_images) and not opt.sch_track:
       if '{}'.format(int(img_id.numpy().astype(np.int32)[0])) in load_results:
         pre_processed_images['meta']['pre_dets'] = \
           load_results['{}'.format(int(img_id.numpy().astype(np.int32)[0]))]

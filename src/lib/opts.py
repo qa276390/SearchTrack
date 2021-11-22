@@ -206,6 +206,8 @@ class opts(object):
                                   'area | score | y_pos | class')
     self.parser.add_argument('--nms_kernel', type=int, default=3)
     self.parser.add_argument('--kmf_confirm_age', type=int, default=0)
+    self.parser.add_argument('--no_enlarge', action='store_true')
+
 
     # dataset
     self.parser.add_argument('--not_rand_crop', action='store_true',

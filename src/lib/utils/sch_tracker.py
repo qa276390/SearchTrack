@@ -37,6 +37,9 @@ class SchTracker(object):
       [det['bbox']  for det in results], np.float32) # N x 2
     track_cat = np.array([track['class'] for track in self.tracks], np.int32) # M
     item_cat = np.array([item['class'] for item in results], np.int32) # N
+    item_size = np.array([((item['bbox'][2] - item['bbox'][0]) * \
+      (item['bbox'][3] - item['bbox'][1])) \
+      for item in results], np.float32) # N
     tracks = [] # [[(bbox_1, score_1)], [(bbox_2_1, score_2_1), (bbox_2_2, score_2_2)], ...]
     trackings = []
     for pre_det in self.tracks:
@@ -96,14 +99,20 @@ class SchTracker(object):
 
     if self.opt.public_det and len(unmatched_dets) > 0:
       # Public detection: only create tracks from provided detections
+      dets_ct = np.array([det['ct']  for det in results], np.float32) # N x 2
       pub_dets = np.array([d['ct'] for d in public_det], np.float32)
-      dist3 = ((dets.reshape(-1, 1, 2) - pub_dets.reshape(1, -1, 2)) ** 2).sum(
+      # print('pub_dets', pub_dets.shape)
+      # print('dets_ct', pub_dets.shape)
+      dist3 = ((dets_ct.reshape(-1, 1, 2) - pub_dets.reshape(1, -1, 2)) ** 2).sum(
         axis=2)
-      matched_dets = [d for d in range(dets.shape[0]) \
+      matched_dets = [d for d in range(dets_ct.shape[0]) \
         if not (d in unmatched_dets)]
       dist3[matched_dets] = 1e18
       for j in range(len(pub_dets)):
         i = dist3[:, j].argmin()
+        # print('results (N)', len(results))
+        # print('dist3', dist3.shape)
+        # print('item_size', len(item_size))
         if dist3[i, j] < item_size[i]:
           dist3[i, :] = 1e18
           result = results[i]
@@ -143,6 +152,9 @@ class SchTracker(object):
         track['ct'] = [ct[0] + v[0], ct[1] + v[1]]
         tracks.append(track)
     self.tracks = tracks
+    for t in  tracks:
+      if 'sch_weight' not in t:
+        print(t.keys())
     return ret
 
 def greedy_assignment(dist): # is this correct?
