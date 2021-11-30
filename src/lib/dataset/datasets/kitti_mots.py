@@ -17,6 +17,7 @@ class KITTIMOTS(GenericDataset):
   num_categories = 2
   default_resolution = [384, 1280]
   class_name = ['Car', 'Pedestrian']
+  # coco2kitti = {1: 2, 3: 1}
   # negative id is for "not as negative sample for abs(id)".
   # 0 for ignore losses for all categories in the bounding box region
   # ['Car', Pedestrian']
@@ -55,9 +56,9 @@ class KITTIMOTS(GenericDataset):
 
 
   def save_results(self, results, save_dir):
-    results_dir = os.path.join(save_dir, 'results_kitti_mots')
+    results_dir = save_dir
     if not os.path.exists(results_dir):
-      os.mkdir(results_dir)
+      os.makedirs(results_dir)
 
     for video in self.coco.dataset['videos']:
       video_id = video['id']
@@ -67,44 +68,26 @@ class KITTIMOTS(GenericDataset):
       images = self.video_to_images[video_id]
       
       for image_info in images:
-        img_id = image_info['id']
-        if not (img_id in results):
+        if not (image_info['id'] in results):
           continue
-        frame_id = image_info['frame_id'] 
-        for i in range(len(results[img_id])):
-          item = results[img_id][i]
-          category_id = item['class']
-          cls_name_ind = category_id
-          class_name = self.class_name[cls_name_ind - 1]
-          if not ('alpha' in item):
-            item['alpha'] = -1
-          if not ('rot_y' in item):
-            item['rot_y'] = -10
-          if 'dim' in item:
-            item['dim'] = [max(item['dim'][0], 0.01), 
-              max(item['dim'][1], 0.01), max(item['dim'][2], 0.01)]
-          if not ('dim' in item):
-            item['dim'] = [-1, -1, -1]
-          if not ('loc' in item):
-            item['loc'] = [-1000, -1000, -1000]
-          
-          track_id = item['tracking_id'] if 'tracking_id' in item else -1
-          f.write('{} {} {} -1 -1'.format(frame_id - 1, track_id, class_name))
-          f.write(' {:d}'.format(int(item['alpha'])))
-          f.write(' {:.2f} {:.2f} {:.2f} {:.2f}'.format(
-            item['bbox'][0], item['bbox'][1], item['bbox'][2], item['bbox'][3]))
-          
-          f.write(' {:d} {:d} {:d}'.format(
-            int(item['dim'][0]), int(item['dim'][1]), int(item['dim'][2])))
-          f.write(' {:d} {:d} {:d}'.format(
-            int(item['loc'][0]), int(item['loc'][1]), int(item['loc'][2])))
-          f.write(' {:d} {:.2f}\n'.format(int(item['rot_y']), item['score']))
-          
+        result = results[image_info['id']]
+        frame_id = image_info['frame_id']
+        for obj in result:
+          track_id = str(obj['class']) + "{0:03}".format(obj['tracking_id'])
+          class_id = obj['class'] 
+          img_height = obj['seg']['size'][0]
+          img_width =  obj['seg']['size'][1]
+          seg_rle = obj['seg']['counts']
+          line = f"{str(int(frame_id)-1)} {track_id} {class_id} {img_height} {img_width} {seg_rle}\n"
+          f.write(line)
+
       f.close()
+      print(f'Save to {out_path}')
+        
 
   def run_eval(self, results, save_dir):
     self.save_results(results, save_dir)
-    os.system('python tools/eval_kitti_track/evaluate_tracking.py ' + \
-              '{}/results_kitti_mots/ {}'.format(
-                save_dir, self.opt.dataset_version))
+    # os.system('python tools/eval_kitti_track/evaluate_tracking.py ' + \
+    #           '{}/results_kitti_mots/ {}'.format(
+    #             save_dir, self.opt.dataset_version))
     

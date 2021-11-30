@@ -86,8 +86,8 @@ def prefetch_test(opt):
   for ind, (img_id, pre_processed_images) in enumerate(data_loader):
     if ind >= num_iters:
       break
-    if opt.tracking and ('is_first_frame' in pre_processed_images) and not opt.sch_track:
-      if '{}'.format(int(img_id.numpy().astype(np.int32)[0])) in load_results:
+    if opt.tracking and ('is_first_frame' in pre_processed_images) :
+      if '{}'.format(int(img_id.numpy().astype(np.int32)[0])) in load_results and not opt.sch_track:
         pre_processed_images['meta']['pre_dets'] = \
           load_results['{}'.format(int(img_id.numpy().astype(np.int32)[0]))]
       else:
@@ -97,6 +97,8 @@ def prefetch_test(opt):
         pre_processed_images['meta']['pre_dets'] = []
       detector.reset_tracking()
       print('Start tracking video', int(pre_processed_images['video_id']))
+      # if int(pre_processed_images['video_id']) > 1:
+      #   break
     if opt.public_det:
       if '{}'.format(int(img_id.numpy().astype(np.int32)[0])) in load_results:
         pre_processed_images['meta']['cur_dets'] = \
@@ -115,14 +117,16 @@ def prefetch_test(opt):
                    ind, num_iters, total=bar.elapsed_td, eta=bar.eta_td)
     for t in avg_time_stats:
       avg_time_stats[t].update(ret[t])
-      Bar.suffix = Bar.suffix + '|{} {tm.val:.3f}s ({tm.avg:.3f}s) '.format(
-        t, tm = avg_time_stats[t])
+      Bar.suffix = Bar.suffix + '|{} {tm.val:.3f}s'.format(t, tm = avg_time_stats[t])
     if opt.print_iter > 0:
       if ind % opt.print_iter == 0:
         print('{}/{}| {}'.format(opt.task, opt.exp_id, Bar.suffix))
     else:
       bar.next()
   bar.finish()
+  for t in avg_time_stats:
+    print('|{} ({tm.avg:.3f}s) '.format(t, tm = avg_time_stats[t]), end='')
+  print('')
   if opt.save_results:
     print('saving results to', opt.save_dir + '/save_results_{}{}.json'.format(
       opt.test_dataset, opt.dataset_version))
