@@ -247,6 +247,7 @@ class SchTrack(nn.Module):
 
         self.nms_kernel = opt.nms_kernel
         self.track_K = opt.track_K
+        self.disable_rel_coords = opt.disable_rel_coords
 
     def sch_heads_forward(self, features, weights, biases, num_insts):
         '''
@@ -301,6 +302,9 @@ class SchTrack(nn.Module):
         #soi = self.sizes_of_interest.float()[instances.fpn_levels]
         relative_coords = relative_coords / 128
         relative_coords = relative_coords.to(dtype=mask_feats.dtype)
+
+        if self.disable_rel_coords:
+          relative_coords = torch.zeros_like(relative_coords)
 
         mask_head_inputs = torch.cat([
             relative_coords, mask_feats[im_inds].reshape(n_inst, self.in_channels, H * W)

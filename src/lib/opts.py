@@ -273,7 +273,7 @@ class opts(object):
     self.parser.add_argument('--sch_thresh', type=float, default=0.3)
     self.parser.add_argument('--track_K', type=int, default=1,
                              help='max number of track proposal.') 
-
+    self.parser.add_argument('--disable_rel_coords', action='store_true')
 
     # CondInst
     self.parser.add_argument('--seg_feat_channel', default=8,type=int, help='.')
