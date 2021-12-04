@@ -76,7 +76,7 @@ class MOTS(GenericDataset):
         result = results[image_info['id']]
         frame_id = image_info['frame_id']
         for obj in result:
-          track_id = str(obj['class']) + "{0:03}".format(obj['tracking_id'])
+          track_id = str(self.ids_cat[int(obj['class'])]) + "{0:03}".format(obj['tracking_id'])
           class_id = self.ids_cat[int(obj['class'])]
           img_height = obj['seg']['size'][0]
           img_width =  obj['seg']['size'][1]
