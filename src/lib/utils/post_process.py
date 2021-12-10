@@ -19,6 +19,10 @@ def _coco_box_to_bbox(box):
                     dtype=np.float32)
     return bbox
 
+def _bbox_to_coco_bbox(bbox):
+  return [(bbox[0]), (bbox[1]),
+          (bbox[2] - bbox[0]), (bbox[3] - bbox[1])]
+
 def get_alpha(rot):
   # output: (B, 8) [bin1_cls[0], bin1_cls[1], bin1_sin, bin1_cos, 
   #                 bin2_cls[0], bin2_cls[1], bin2_sin, bin2_cos]
@@ -67,11 +71,12 @@ def generic_post_process(
       if 'seg' in dets:
         item['seg'] = mask_utils.encode(
           (np.asfortranarray(cv2.warpAffine(dets['seg'][i][j], trans, (width, height),
-				   flags=cv2.INTER_CUBIC) > 0.5).astype(np.uint8)))
-        item['seg']['counts'] = item['seg']['counts'].decode("utf-8")
+				   flags=cv2.INTER_CUBIC) > 0.5).astype(np.uint8)))      
         if opt.wh_weight <= 0:
           item['bbox'] = _coco_box_to_bbox(mask_utils.toBbox(item['seg']))
-      
+        if opt.use_bbox_as_mask:
+          item['seg'] = mask_utils.frPyObjects(np.array([_bbox_to_coco_bbox(item['bbox'])], dtype='double'), height, width)[0]
+        item['seg']['counts'] = item['seg']['counts'].decode("utf-8")
       if 'sch_weights' in dets:
         item['sch_weight'] = dets['sch_weights'][i][j]
 
