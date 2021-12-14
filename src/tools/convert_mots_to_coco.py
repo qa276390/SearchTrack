@@ -1,12 +1,14 @@
 import os
 import numpy as np
 import json
-import cv2
+#import cv2
 
+TRAIN_PART_SEQ = ['MOTS20-02', 'MOTS20-05', 'MOTS20-09']
+VAL_PART_SEQ = ['MOTS20-11']
 # Use the same script for MOT16
 DATA_PATH = '../../data/mots20/'
 OUT_PATH = DATA_PATH + 'annotations/'
-SPLITS = ['train', 'test']
+SPLITS = ['train', 'test', 'train_part', 'val_part']
 HALF_VIDEO = False
 CREATE_SPLITTED_ANN = True
 CREATE_SPLITTED_DET = True
@@ -16,12 +18,18 @@ if not os.path.exists(OUT_PATH):
 
 if __name__ == '__main__':
   for split in SPLITS:
-    data_path = DATA_PATH + (split if not HALF_VIDEO else 'train')
+    data_path = DATA_PATH + ('train' if not 'test' in split else 'test')
     out_path = OUT_PATH + '{}.json'.format(split)
     out = {'images': [], 'annotations': [], 
-           'categories': [{'id': 2, 'name': 'Pedestrain'}, {'id': 10, 'name': 'DoneCare'}],
+           'categories': [{'id': 2, 'name': 'Pedestrain'}, {'id': 10, 'name': 'DontCare'}],
            'videos': []}
-    seqs = os.listdir(data_path)
+    if 'train_part' in split:
+      seqs = TRAIN_PART_SEQ
+    elif 'val_part' in split:
+      seqs = VAL_PART_SEQ
+    else:
+      seqs = os.listdir(data_path)
+
     image_cnt = 0
     ann_cnt = 0
     video_cnt = 0

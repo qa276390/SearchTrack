@@ -2,8 +2,8 @@ import json
 import numpy as np
 import os
 from collections import defaultdict
-dataset_version = 'train'
-split = 'test' if not 'train' in dataset_version else 'train'
+dataset_version = 'val_half'
+split = 'test' if 'test' in dataset_version else 'train'
 
 DET_PATH = os.path.join('../../data/mot17', split)
 ANN_PATH = '../../data/mot17/annotations/{}.json'.format(dataset_version)
@@ -21,7 +21,7 @@ if __name__ == '__main__':
   for seq in sorted(seqs):
     print('seq', seq)
     seq_path = '{}/{}/'.format(DET_PATH, seq)
-    if split == 'val_half':
+    if 'half' in dataset_version:
       ann_path = seq_path + 'det/det_val_half.txt'
       train_ann_path = seq_path + 'det/det_train_half.txt'
       train_anns = np.loadtxt(train_ann_path, dtype=np.float32, delimiter=',')

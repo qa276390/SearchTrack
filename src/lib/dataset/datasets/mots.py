@@ -30,10 +30,10 @@ class MOTS(GenericDataset):
     if opt.dataset_version in ['train', 'test']:
       ann_file = '{}.json'.format('train' if split == 'train' or split == 'val' else \
         'test')
-    # elif opt.dataset_version == '17halftrain':
-    #   ann_file = '{}.json'.format('train_half')
-    # elif opt.dataset_version == '17halfval':
-    #   ann_file = '{}.json'.format('val_half')
+    elif opt.dataset_version == 'train_part':
+       ann_file = '{}.json'.format('train_part')
+    elif opt.dataset_version == 'val_part':
+       ann_file = '{}.json'.format('val_part')
     img_dir = os.path.join(data_dir, '{}'.format(
       'test' if 'test' in self.dataset_version else 'train'))
     
@@ -45,7 +45,7 @@ class MOTS(GenericDataset):
     super(MOTS, self).__init__(opt, split, ann_path, img_dir)
 
     self.num_samples = len(self.images)
-    print('Loaded MOT {} {} {} samples'.format(
+    print('Loaded MOTS {} {} {} samples'.format(
       self.dataset_version, split, self.num_samples))
 
   def _to_float(self, x):
@@ -76,7 +76,7 @@ class MOTS(GenericDataset):
         result = results[image_info['id']]
         frame_id = image_info['frame_id']
         for obj in result:
-          track_id = str(obj['class']) + "{0:03}".format(obj['tracking_id'])
+          track_id = str(self.ids_cat[int(obj['class'])]) + "{0:03}".format(obj['tracking_id'])
           class_id = self.ids_cat[int(obj['class'])]
           img_height = obj['seg']['size'][0]
           img_width =  obj['seg']['size'][1]
