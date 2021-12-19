@@ -2,7 +2,7 @@ import json
 import numpy as np
 import os
 from collections import defaultdict
-dataset_version = 'val_half'
+dataset_version = 'test'
 split = 'test' if 'test' in dataset_version else 'train'
 
 DET_PATH = os.path.join('../../data/mot17', split)
@@ -12,7 +12,7 @@ OUT_PATH = OUT_DIR + '{}_det.json'.format(dataset_version)
 
 if __name__ == '__main__':
   if not os.path.exists(OUT_DIR):
-    os.mkdir(OUT_DIR)
+    os.makedirs(OUT_DIR)
   seqs = [s for s in os.listdir(DET_PATH)]
   print(seqs)
   data = json.load(open(ANN_PATH, 'r'))
@@ -40,6 +40,7 @@ if __name__ == '__main__':
       image_to_anns[file_name].append(bbox + [score])
 
   results = {}
+  
   for image_info in images:
     image_id = image_info['id']
     file_name = image_info['file_name']
@@ -52,4 +53,5 @@ if __name__ == '__main__':
       results[image_id].append(
         {'bbox': bbox, 'score': float(det[4]), 'class': 1, 'ct': ct})
   out_path = OUT_PATH
+  print('results', len(results))
   json.dump(results, open(out_path, 'w'))
