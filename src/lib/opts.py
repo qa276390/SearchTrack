@@ -280,6 +280,7 @@ class opts(object):
     self.parser.add_argument('--seg_weight', default= 1., type=float, help='')
     self.parser.add_argument('--not_make_mask_disjoint', action='store_true')
     self.parser.add_argument('--use_bbox_as_mask', action='store_true')
+    self.parser.add_argument('--use_mask_as_bbox', action='store_true')
 
 
     # loss

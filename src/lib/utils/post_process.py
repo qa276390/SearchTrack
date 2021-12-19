@@ -72,7 +72,7 @@ def generic_post_process(
         item['seg'] = mask_utils.encode(
           (np.asfortranarray(cv2.warpAffine(dets['seg'][i][j], trans, (width, height),
 				   flags=cv2.INTER_CUBIC) > 0.5).astype(np.uint8)))      
-        if opt.wh_weight <= 0:
+        if opt.wh_weight <= 0 or opt.use_mask_as_bbox:
           item['bbox'] = _coco_box_to_bbox(mask_utils.toBbox(item['seg']))
         if opt.use_bbox_as_mask:
           item['seg'] = mask_utils.frPyObjects(np.array([_bbox_to_coco_bbox(item['bbox'])], dtype='double'), height, width)[0]

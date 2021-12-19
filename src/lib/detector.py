@@ -278,7 +278,6 @@ class Detector(object):
     inp_width, inp_height = meta['inp_width'], meta['inp_height']
     out_width, out_height = meta['out_width'], meta['out_height']
     input_hm = np.zeros((1, inp_height, inp_width), dtype=np.float32)
-    kmf_hm = np.zeros((1, inp_height, inp_width), dtype=np.float32)
 
     output_inds = []
     track_ids = []
@@ -292,8 +291,6 @@ class Detector(object):
         track['bbox'], trans_output, out_width, out_height)
       h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
       if (h > 0 and w > 0):
-        radius = gaussian_radius((math.ceil(h), math.ceil(w)))
-        radius = max(0, int(radius))
         if 'seg' in self.opt.task  and self.opt.seg_center:
           seg_mask = self.get_masks_as_input(track, trans_input)
           ct = np.array([np.mean(np.where(seg_mask>=0.5)[1]), np.mean(np.where(seg_mask>=0.5)[0])], dtype=np.float32)
@@ -309,28 +306,13 @@ class Detector(object):
         if with_sch:
           sch_weights.append(track['sch_weight'])
         if with_hm:
+          radius = gaussian_radius((math.ceil(h), math.ceil(w)))
+          radius = max(0, int(radius))
           draw_umich_gaussian(input_hm[0], ct_int, radius)
         if with_kmf:
           if track['active'] >= self.opt.kmf_confirm_age:
             p_bbox_ = track['kmf'].predict()[0]
             p_bbox = self._trans_bbox(p_bbox_, trans_input, inp_width, inp_height)
-            p_h, p_w = p_bbox[3] - p_bbox[1], p_bbox[2] - p_bbox[0]
-            init = (track['active'] == 1)
-            if self.opt.guss_rad:
-              min_overlap = 0.2 if init else 0.6
-              conf = self.opt.init_conf if init else 1
-              p_radius = gaussian_radius_center((math.ceil(p_h), math.ceil(p_w)), min_overlap=0.2)
-            else:
-              p_radius = gaussian_radius((math.ceil(p_h), math.ceil(p_w)))
-            p_radius = max(0, int(p_radius))
-            p_ct_int = np.array(
-              [(p_bbox[0] + p_bbox[2]) / 2, (p_bbox[1] + p_bbox[3]) / 2], dtype=np.float32).astype(np.int32)
-            if (p_h > 0) and (p_w > 0) and (p_ct_int[0] > 0) and (p_ct_int[1]> 0) and (p_ct_int[0] < inp_width) and (p_ct_int[1] < inp_height):
-              if self.opt.guss_oval:
-                p_radius = p_radius if (self.opt.guss_rad and init) or (self.opt.guss_rad and self.opt.guss_rad_always) else 0
-                draw_umich_gaussian_oval(kmf_hm[0], p_ct_int, radius_h=h//2+p_radius, radius_w=w//2+p_radius)
-              else:
-                draw_umich_gaussian(kmf_hm[0], p_ct_int, p_radius)
             # kmf_ind: trans to output
             p_bbox_out = self._trans_bbox(p_bbox_, trans_output, out_width, out_height)
             p_ct_out = np.array([(p_bbox_out[0] + p_bbox_out[2]) / 2, 
@@ -344,15 +326,6 @@ class Detector(object):
       if self.opt.flip_test:
         input_hm = np.concatenate((input_hm, input_hm[:, :, :, ::-1]), axis=0)
       input_hm = torch.from_numpy(input_hm).to(self.opt.device)
-    if with_kmf and self.opt.kmf_att:
-      if not self.opt.keep_att:
-        kmf_hm = kmf_hm * 0.5 + 0.5
-      kmf_hm = kmf_hm[np.newaxis]
-      if self.opt.flip_test:
-        kmf_hm = np.concatenate((kmf_hm, kmf_hm[:, :, :, ::-1]), axis=0)
-      kmf_hm = torch.from_numpy(kmf_hm).to(self.opt.device)
-    else:
-      kmf_hm = None
     
     if with_kmf:
       assert (len(output_inds) == len(kmf_inds))
@@ -364,7 +337,7 @@ class Detector(object):
     track_ids = np.array(track_ids, np.int64).reshape(1, -1)
     sch_weights = np.array(sch_weights)[None, :]
     sch_weights = torch.from_numpy(sch_weights).to(self.opt.device)
-    return input_hm, output_inds, kmf_hm, track_ids, kmf_inds, sch_weights
+    return input_hm, output_inds, None, track_ids, kmf_inds, sch_weights
 
   def merge_masks_as_input(self, anns, trans_input):
       rles = [ann['segmentation'] for ann in anns]

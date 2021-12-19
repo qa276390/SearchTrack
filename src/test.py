@@ -51,6 +51,7 @@ class PrefetchDataset(torch.utils.data.Dataset):
     return len(self.images)
 
 def prefetch_test(opt):
+  print('===== prefetch_test =====')
   if not opt.not_set_cuda_env:
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
   Dataset = dataset_factory[opt.test_dataset]

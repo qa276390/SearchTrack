@@ -14,14 +14,14 @@ from ..generic_dataset import GenericDataset
 from utils.ddd_utils import compute_box_3d, project_to_image
 
 class KITTI(GenericDataset):
-  num_categories = 2
+  num_categories = 3
   default_resolution = [384, 1280]
   # ['Pedestrian', 'Car', 'Cyclist', 'Van', 'Truck',  'Person_sitting',
   #       'Tram', 'Misc', 'DontCare']
-  class_name = ['Pedestrian', 'Car']
+  class_name = ['Pedestrian', 'Car', 'Cyclist']
   # negative id is for "not as negative sample for abs(id)".
   # 0 for ignore losses for all categories in the bounding box region
-  cat_ids = {1:1, 2:2, 3:-1, 4:-2, 5:-2, 6:-1, 7:-9999, 8:-9999, 9:0}
+  cat_ids = {1:1, 2:2, 3:3, 4:-2, 5:-2, 6:-1, 7:-9999, 8:-9999, 9:0}
   max_objs = 50
   def __init__(self, opt, split):
     data_dir = os.path.join(opt.data_dir, 'kitti')
