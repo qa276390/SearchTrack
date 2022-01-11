@@ -1,8 +1,6 @@
 cd src
 # train
-python main.py tracking --exp_id mot17_half --dataset mot --dataset_version 17halftrain --pre_hm --ltrb_amodal --same_aug --hm_disturb 0.05 --lost_disturb 0.4 --fp_disturb 0.1 --gpus 0,1 --load_model ../models/crowdhuman.pth
+CUDA_VISIBLE_DEVICES=1,2 python main.py tracking  --exp_id mot17_half_sch --dataset mot --dataset_version 17halftrain --ltrb_amodal   --same_aug_pre --num_workers 4 --load_model ../exp/tracking/crowdhuman/model_last.pth  --sch_track --hm_disturb 0.05  --no_pre_img --sch_feat_channel 16 --gpus 4,5 --not_set_cuda_env --batch_size 5 --master_batch_size 2 --wh_weight 0.1  --val_interval 1000 --mots_use_all_head 
 # test
-python test.py tracking --exp_id mot17_half --dataset mot --dataset_version 17halfval --pre_hm --ltrb_amodal --track_thresh 0.4 --pre_thresh 0.5 --resume
-# test with public detection
-python test.py tracking --exp_id mot17_half --dataset mot --dataset_version 17halfval --pre_hm --ltrb_amodal --track_thresh 0.4 --pre_thresh 0.5 --resume --public_det --load_results ../data/mot17/results/val_half_det.json
+CUDA_VISIBLE_DEVICES=1 python test.py tracking --exp_id mot17_half_sch --dataset mot --dataset_version 17trainval --ltrb_amodal  --track_thresh 0.4  --pre_thresh 0.4 --nms_kernel 3 --sch_track --no_pre_img --sch_thresh 0.4 --track_K 3  --sch_feat_channel 16 --kmf_ind --sch_eval --max_age 1 --save_results
 cd ..
