@@ -1,7 +1,7 @@
 version: "2.3"
 services:
   dev:
-    image: centertrack_dev
+    image: searchtrack_dev
     build:
       context: .
       dockerfile: ./docker/Dockerfile
@@ -14,4 +14,4 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=all
     volumes: 
       - /data/home/r08944022/.ssh:/root/.ssh
-      - /data/home/r08944022/CenterTrack:/CenterTrack
+      - /data/home/r08944022/SearchTrack:/SearchTrack

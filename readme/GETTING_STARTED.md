@@ -4,7 +4,7 @@ This document provides tutorials to train and evaluate CenterTrack. Before getti
 
 ## Benchmark evaluation
 
-First, download the models you want to evaluate from our [model zoo](MODEL_ZOO.md) and put them in `CenterTrack_ROOT/models/`. 
+First, download the models you want to evaluate from our [model zoo](MODEL_ZOO.md) and put them in `SearchTrack_ROOT/models/`. 
 
 ### MOT17
 

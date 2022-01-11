@@ -1,6 +1,6 @@
 # MODEL ZOO
-
-### Common settings and notes
+COMING SOON...
+<!-- ### Common settings and notes
 
 - The experiments are run with PyTorch 1.0, CUDA 10.0, and CUDNN 7.5.
 - Training times are measured on our servers with TITAN V GPUs (12 GB Memory).
@@ -72,4 +72,4 @@
 | [coco_pose_tracking](../experiments/coco_pose_tracking.sh)    | 8  |     19h   |    33ms   | [model](https://drive.google.com/open?id=1H0YvFYCOIZ06EzAkC2NxECNQGXxK27hH)|
 
 - Both models are trained with the "training on static image data" technic in our paper.
-- The models are not evaluated on any benchmarks since there are no suitable ones in this setting. We provide them for demo purpose only.
+- The models are not evaluated on any benchmarks since there are no suitable ones in this setting. We provide them for demo purpose only. -->
