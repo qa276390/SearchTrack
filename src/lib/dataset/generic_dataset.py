@@ -106,7 +106,7 @@ class GenericDataset(data.Dataset):
     gt_det = {'bboxes': [], 'scores': [], 'clses': [], 'cts': []}
 
     pre_cts, track_ids = None, None
-    if opt.tracking and self.split == 'train':
+    if opt.tracking and not self.split == 'test':
       pre_image, pre_anns, frame_dist = self._load_pre_data(
         img_info['video_id'], img_info['frame_id'])
       if flipped:
