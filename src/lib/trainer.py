@@ -61,10 +61,6 @@ class GenericLoss(torch.nn.Module):
         losses['seg'] += self.crit_seg(output['seg'],output['conv_weight'], 
                                       batch['ind'], batch['mask'], batch['seg_mask']) / opt.num_stacks
       if 'sch' in output:
-        if opt.kmf_ind:
-          losses['sch'] += self.crit_sch(output['sch'], output['sch_weight'], 
-                                        ind=batch['ind'], pre_ind=batch['pre_ind'], kmf_ind=batch['kmf_ind'], mask=batch['pre_mask'], target=batch['hm_track']) / opt.num_stacks
-        else:
           losses['sch'] += self.crit_sch(output['sch'], output['sch_weight'], 
                                         ind=batch['ind'], pre_ind=batch['pre_ind'], mask=batch['pre_mask'], target=batch['hm_track']) / opt.num_stacks
 
@@ -122,10 +118,8 @@ class ModleWithLoss(torch.nn.Module):
   
   def forward(self, batch):
     pre_img = batch['pre_img'] if 'pre_img' in batch else None
-    pre_hm = batch['pre_hm'] if 'pre_hm' in batch else None
-    kmf_att = batch['kmf_att'] if 'kmf_att' in batch else None
     #_update_batch(batch)
-    outputs = self.model(batch['image'], pre_img, pre_hm, kmf_att)
+    outputs = self.model(batch['image'], pre_img=pre_img)
     loss, loss_stats = self.loss(outputs, batch)
     return outputs[-1], loss, loss_stats
 

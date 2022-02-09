@@ -17,9 +17,7 @@ import torch.utils.data as data
 from utils.image import flip, color_aug
 from utils.image import get_affine_transform, affine_transform
 from utils.image import gaussian_radius, draw_umich_gaussian, draw_umich_gaussian_oval, gaussian_radius_center
-from utils.image import erase_seg_mask_from_image, copy_paste_with_seg_mask
 from utils.utils import make_disjoint
-from utils.kalman_filter import KalmanBoxTracker
 import copy
 import random
 
@@ -90,7 +88,6 @@ class GenericDataset(data.Dataset):
     s = max(img.shape[0], img.shape[1]) * 1.0 if not self.opt.not_max_crop \
       else np.array([img.shape[1], img.shape[0]], np.float32)
     aug_s, rot, flipped = 1, 0, 0
-    kmf_cts = None
     if self.split == 'train':
       c, aug_s, rot = self._get_aug_param(c, s, width, height)
       s = s * aug_s
@@ -109,44 +106,34 @@ class GenericDataset(data.Dataset):
     gt_det = {'bboxes': [], 'scores': [], 'clses': [], 'cts': []}
 
     pre_cts, track_ids = None, None
-    if opt.tracking:
-      num_pre_data = opt.num_pre_data 
-      pre_images, pre_annss, frame_dists = self._load_pre_data(
-        img_info['video_id'], img_info['frame_id'], 
-        img_info['sensor_id'] if 'sensor_id' in img_info else 1, num_pre_data)
+    if opt.tracking and self.split == 'train':
+      pre_image, pre_anns, frame_dist = self._load_pre_data(
+        img_info['video_id'], img_info['frame_id'])
       if flipped:
-        pre_images = [pre_image[:, ::-1, :].copy() for pre_image in pre_images]
-        pre_annss = [self._flip_anns(pre_anns, height, width) for pre_anns in pre_annss]
-      if opt.same_aug_pre and frame_dists[0] != 0:
+        pre_image = pre_image[:, ::-1, :].copy() 
+        pre_anns = self._flip_anns(pre_anns, height, width) 
+      if opt.same_aug_pre and frame_dist != 0:
         trans_input_pre = trans_input 
         trans_output_pre = trans_output
       else:
-        if self.split == 'train':
-          c_pre, aug_s_pre, _ = self._get_aug_param(
-            c, s, width, height, disturb=True)
-          s_pre = s * aug_s_pre
-        else:
-          c_pre = c
-          s_pre = s
+        c_pre, aug_s_pre, _ = self._get_aug_param(
+          c, s, width, height, disturb=True)
+        s_pre = s * aug_s_pre
+
         trans_input_pre = get_affine_transform(
           c_pre, s_pre, rot, [opt.input_w, opt.input_h])
         trans_output_pre = get_affine_transform(
           c_pre, s_pre, rot, [opt.output_w, opt.output_h])
 
-      pre_imgs = [self._get_input(pre_image, trans_input_pre) for pre_image in pre_images]
-      pre_hm, pre_cts, track_ids = self._get_pre_dets(
-        pre_annss[-1], trans_input_pre, trans_output_pre, ret)
-      ret['pre_img'] = np.array(pre_imgs[-1])
-      if opt.pre_hm:
-        ret['pre_hm'] = pre_hm
+      pre_img = self._get_input(pre_image, trans_input_pre) 
+      pre_cts, track_ids = self._get_pre_dets(
+        pre_anns, trans_input_pre, trans_output_pre, ret)
+
+      ret['pre_img'] = pre_img
     
-        ### init samples
+    ### init samples
     self._init_ret(ret, gt_det)
     calib = self._get_calib(img_info, width, height)
-
-    if opt.tracking and (opt.kmf_ind or opt.kmf_att) and opt.kmf_pit:
-      kmf_trackers = self._gen_kmf_att_hm(ret, pre_annss, trans_output) # output format 
-      kmf_cts = [kmf_trackers[tid]['ct'] for tid in track_ids]
     
     num_objs = min(len(anns), self.max_objs)
     for k in range(num_objs):
@@ -172,16 +159,11 @@ class GenericDataset(data.Dataset):
         else:
           self._mask_ignore_or_crowd(ret, cls_id, bbox)
         continue
-      
 
       self._add_instance(
         ret, gt_det, k, cls_id, bbox, bbox_amodal, ann, trans_output, aug_s, 
-        calib, seg_mask, pre_cts, track_ids, kmf_cts)
+        calib, seg_mask, pre_cts, track_ids)
       
-      if opt.kmf_att and not opt.kmf_pit:
-        _ = self._add_kmf_att(ret=ret, ann=ann, trans_input=trans_input)
-    if 'kmf_att' in ret and not opt.keep_att:
-      ret['kmf_att'][0] = ret['kmf_att'][0] * 0.5 + 0.5
     if self.opt.debug > 0:
       gt_det = self._format_gt_det(gt_det)
       meta = {'c': c, 's': s, 'gt_det': gt_det, 'img_id': img_info['id'],
@@ -225,62 +207,32 @@ class GenericDataset(data.Dataset):
     # If training, random sample nearby frames as the "previous" frame
     # If testing, get the exact prevous frame
     if 'train' in self.split:
-      if (self.opt.kmf_att and self.opt.kmf_pit) or self.opt.one_way_pre_data: # load pre data from one-way only
-        rev = random.randrange(2)
-        img_ids = [(img_info['id'], img_info['frame_id']) \
-            for img_info in img_infos \
-            if (frame_id - img_info['frame_id']) * pow(-1, rev) <= self.opt.max_frame_dist and \
-            (frame_id - img_info['frame_id']) * pow(-1, rev) > 0 and \
-            (not ('sensor_id' in img_info) or img_info['sensor_id'] == sensor_id)]
-        img_ids.sort(key=lambda x: x[1])
-        if len(img_ids) == 0:
-          img_ids = [(img_info['id'], img_info['frame_id']) \
-              for img_info in img_infos \
-              if (img_info['frame_id'] - frame_id) == 0 and \
-              (not ('sensor_id' in img_info) or img_info['sensor_id'] == sensor_id)]
-        if len(img_ids) < num_data:
-          img_ids = img_ids * num_data
-        pre_ids = np.random.choice(len(img_ids), num_data, replace=False)
-        pre_ids = sorted(pre_ids, reverse=(rev%2==1))
-      else:
         img_ids = [(img_info['id'], img_info['frame_id']) \
             for img_info in img_infos \
             if abs(img_info['frame_id'] - frame_id) <= self.opt.max_frame_dist and \
             (not ('sensor_id' in img_info) or img_info['sensor_id'] == sensor_id)]
-        pre_ids = np.random.choice(len(img_ids), num_data, replace=False)
     else:
       img_ids = [(img_info['id'], img_info['frame_id']) \
           for img_info in img_infos \
-            if (frame_id - img_info['frame_id']) <= num_data \
-              and (frame_id - img_info['frame_id']) > 0 ]
-      img_ids.sort(key=lambda x: x[1]) # frame: (1, 2, 3 ...)
+            if (img_info['frame_id'] - frame_id) == -1 and \
+            (not ('sensor_id' in img_info) or img_info['sensor_id'] == sensor_id)]
       if len(img_ids) == 0:
         img_ids = [(img_info['id'], img_info['frame_id']) \
             for img_info in img_infos \
             if (img_info['frame_id'] - frame_id) == 0 and \
             (not ('sensor_id' in img_info) or img_info['sensor_id'] == sensor_id)]
-      if len(img_ids) < num_data:
-        img_ids = img_ids * num_data
-      pre_ids = np.arange(len(img_ids))
-    imgs, annss, frame_dists = [], [], []
-    for pre_id in pre_ids:
-      img_id, pre_frame_id = img_ids[pre_id]
-      frame_dist = abs(frame_id - pre_frame_id)
-      img, anns, _, _ = self._load_image_anns(img_id, self.coco, self.img_dir)
-      imgs.append(img)
-      annss.append(anns)
-      frame_dists.append(frame_dist)
-      
-    return imgs, annss, frame_dists
+
+    rand_id = np.random.choice(len(img_ids))
+    img_id, pre_frame_id = img_ids[rand_id]
+    frame_dist = abs(frame_id - pre_frame_id)
+    img, anns, _, _ = self._load_image_anns(img_id, self.coco, self.img_dir)   
+    return img, anns, frame_dist
 
 
   def _get_pre_dets(self, anns, trans_input, trans_output, ret):
-    k = 0
-    hm_h, hm_w = self.opt.input_h, self.opt.input_w
+    in_h, in_w = self.opt.input_h, self.opt.input_w
     down_ratio = self.opt.down_ratio
     trans = trans_input
-    reutrn_hm = self.opt.pre_hm
-    pre_hm = np.zeros((1, hm_h, hm_w), dtype=np.float32) if reutrn_hm else None
     pre_cts, track_ids = [], []
   
     for i, ann in enumerate(anns):
@@ -293,10 +245,9 @@ class GenericDataset(data.Dataset):
       bbox = self._coco_box_to_bbox(ann['bbox'])
       bbox[:2] = affine_transform(bbox[:2], trans)
       bbox[2:] = affine_transform(bbox[2:], trans)
-      bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, hm_w - 1)
-      bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, hm_h - 1)
+      bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, in_w - 1)
+      bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, in_h - 1)
       h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-      max_rad = 1
 
       track_id = ann['track_id'] if 'track_id' in ann else -1
   
@@ -308,19 +259,12 @@ class GenericDataset(data.Dataset):
           ct = np.array([np.mean(np.where(seg_mask>=0.5)[1]), np.mean(np.where(seg_mask>=0.5)[0])], dtype=np.float32)
         else:
           ct = np.array(
-            [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
-
-        radius = gaussian_radius((math.ceil(h), math.ceil(w)))
-        radius = max(0, int(radius)) 
-        max_rad = max(max_rad, radius)
-        
+            [(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)     
         ct0 = ct.copy()
         conf = 1
-
         ct[0] = ct[0] + np.random.randn() * self.opt.hm_disturb * w
         ct[1] = ct[1] + np.random.randn() * self.opt.hm_disturb * h
-        conf = 1 if np.random.random() > self.opt.lost_disturb else 0
-        
+        conf = 1 if np.random.random() > self.opt.lost_disturb else 0 # always true    
         ct_int = ct.astype(np.int32)
         if conf == 0:
           pre_cts.append(ct / down_ratio)
@@ -328,27 +272,17 @@ class GenericDataset(data.Dataset):
           pre_cts.append(ct0 / down_ratio)
 
         track_ids.append(ann['track_id'] if 'track_id' in ann else -1)
-        if reutrn_hm:
-          draw_umich_gaussian(pre_hm[0], ct_int, radius, k=conf)
 
-        if np.random.random() < self.opt.fp_disturb and reutrn_hm:
-          ct2 = ct0.copy()
-          # Hard code heatmap disturb ratio, haven't tried other numbers.
-          ct2[0] = ct2[0] + np.random.randn() * 0.05 * w
-          ct2[1] = ct2[1] + np.random.randn() * 0.05 * h 
-          ct2_int = ct2.astype(np.int32)
-          draw_umich_gaussian(pre_hm[0], ct2_int, radius, k=conf)
+    return pre_cts, track_ids
 
-    return pre_hm, pre_cts, track_ids
-
-  def merge_masks_as_input(self, anns, trans_input):
-      rles = [ann['segmentation'] for ann in anns  if not ann['category_id'] == 10]
-      mgrle = mask_utils.merge(rles)
-      mask = mask_utils.decode(mgrle)
-      inp = cv2.warpAffine(mask, trans_input, 
-                    (self.opt.input_w, self.opt.input_h),
-                    flags=cv2.INTER_LINEAR)
-      return inp
+  # def merge_masks_as_input(self, anns, trans_input):
+  #     rles = [ann['segmentation'] for ann in anns  if not ann['category_id'] == 10]
+  #     mgrle = mask_utils.merge(rles)
+  #     mask = mask_utils.decode(mgrle)
+  #     inp = cv2.warpAffine(mask, trans_input, 
+  #                   (self.opt.input_w, self.opt.input_h),
+  #                   flags=cv2.INTER_LINEAR)
+  #     return inp
   def get_masks_as_input(self, ann, trans_input):
       rle = ann['segmentation']
       mask = mask_utils.decode(rle)
@@ -388,40 +322,40 @@ class GenericDataset(data.Dataset):
     
     return c, aug_s, rot
 
-  def _copy_and_paste(self, anchor_ann, anns, image, copied_ann, copied_image, height, width):
-    if len(anns) <= 0 or anns is None or copied_ann is None or len(copied_ann) <= 0 or anchor_ann['image_id'] == copied_ann['image_id']:
-      return anns, image, 0
+  # def _copy_and_paste(self, anchor_ann, anns, image, copied_ann, copied_image, height, width):
+  #   if len(anns) <= 0 or anns is None or copied_ann is None or len(copied_ann) <= 0 or anchor_ann['image_id'] == copied_ann['image_id']:
+  #     return anns, image, 0
  
-    copied_mask = mask_utils.decode(copied_ann['segmentation'])
-    anchor_bbox = mask_utils.toBbox(anchor_ann['segmentation']) #  bbs     - [nx4] Bounding box(es) stored as [x y w h]
-    copied_bbox = mask_utils.toBbox(copied_ann['segmentation']) #  bbs     - [nx4] Bounding box(es) stored as [x y w h]
+  #   copied_mask = mask_utils.decode(copied_ann['segmentation'])
+  #   anchor_bbox = mask_utils.toBbox(anchor_ann['segmentation']) #  bbs     - [nx4] Bounding box(es) stored as [x y w h]
+  #   copied_bbox = mask_utils.toBbox(copied_ann['segmentation']) #  bbs     - [nx4] Bounding box(es) stored as [x y w h]
 
-    scale_ratio = min(anchor_bbox[3] / (copied_bbox[3] + 1e-8), 1)
-    if copied_bbox[3] / copied_bbox[2] > 5 or copied_bbox[3] / copied_bbox[2] < 1: #dacnp v1.1
-      return anns, image, 0
-    dx, dy = - copied_bbox[0], - copied_bbox[1]
-    jitter_x, jitter_y = np.random.random() * anchor_bbox[2] , np.random.random() * anchor_bbox[3]
-    dx = dx*scale_ratio + anchor_bbox[0] + jitter_x
-    dy = dy*scale_ratio + anchor_bbox[1] + jitter_y
-    M = np.float32([[scale_ratio, 0, dx],[0, scale_ratio, dy]])
-    _copied_image = copy.deepcopy(copied_image)
-    cpimg = cv2.warpAffine(_copied_image, M, (image.shape[1], image.shape[0]))
-    cpmask = cv2.warpAffine(copied_mask, M, (image.shape[1], image.shape[0]))
+  #   scale_ratio = min(anchor_bbox[3] / (copied_bbox[3] + 1e-8), 1)
+  #   if copied_bbox[3] / copied_bbox[2] > 5 or copied_bbox[3] / copied_bbox[2] < 1: #dacnp v1.1
+  #     return anns, image, 0
+  #   dx, dy = - copied_bbox[0], - copied_bbox[1]
+  #   jitter_x, jitter_y = np.random.random() * anchor_bbox[2] , np.random.random() * anchor_bbox[3]
+  #   dx = dx*scale_ratio + anchor_bbox[0] + jitter_x
+  #   dy = dy*scale_ratio + anchor_bbox[1] + jitter_y
+  #   M = np.float32([[scale_ratio, 0, dx],[0, scale_ratio, dy]])
+  #   _copied_image = copy.deepcopy(copied_image)
+  #   cpimg = cv2.warpAffine(_copied_image, M, (image.shape[1], image.shape[0]))
+  #   cpmask = cv2.warpAffine(copied_mask, M, (image.shape[1], image.shape[0]))
 
-    result_img = copy_paste_with_seg_mask(image, cpimg, cpmask, blend=False)
+  #   result_img = copy_paste_with_seg_mask(image, cpimg, cpmask, blend=False)
 
-    cpseg= mask_utils.encode((np.asfortranarray(cpmask > 0.5).astype(np.uint8)))
-    cpseg['counts'] = cpseg['counts'].decode("utf-8")
-    _copied_ann = copy.deepcopy(copied_ann)
-    _copied_ann.update({'height':height, 'width':width, 'segmentation': cpseg, 'priority': 99})
-    _copied_ann['bbox'] = mask_utils.toBbox(_copied_ann['segmentation'])  #dacnp v1.1
+  #   cpseg= mask_utils.encode((np.asfortranarray(cpmask > 0.5).astype(np.uint8)))
+  #   cpseg['counts'] = cpseg['counts'].decode("utf-8")
+  #   _copied_ann = copy.deepcopy(copied_ann)
+  #   _copied_ann.update({'height':height, 'width':width, 'segmentation': cpseg, 'priority': 99})
+  #   _copied_ann['bbox'] = mask_utils.toBbox(_copied_ann['segmentation'])  #dacnp v1.1
 
-    for a in anns:
-      a.update({'priority': 1})
+  #   for a in anns:
+  #     a.update({'priority': 1})
 
-    anns.append(_copied_ann)
-    anns = make_disjoint(anns, strategy='priority')
-    return anns, result_img, 1
+  #   anns.append(_copied_ann)
+  #   anns = make_disjoint(anns, strategy='priority')
+  #   return anns, result_img, 1
 
 
   def _flip_anns(self, anns, height, width):
@@ -490,13 +424,8 @@ class GenericDataset(data.Dataset):
       ret['hm_track'] = np.zeros(
       (max_objs, self.opt.output_h, self.opt.output_w), np.float32)
       ret['pre_ind'] = np.zeros((max_objs), dtype=np.int64)
-      ret['kmf_ind'] = np.zeros((max_objs), dtype=np.int64)
-      ret['kmf_cts'] = np.zeros((max_objs, 2), dtype=np.int64)
       ret['pre_mask'] = np.zeros((max_objs), dtype=np.float32)
-    if self.opt.kmf_att:
-      ret['kmf_att'] = np.zeros(
-      (1, self.opt.input_h, self.opt.input_w), 
-      np.float32)
+
     regression_head_dims = {
       'reg': 2, 'wh': 2, 'tracking': 2, 'ltrb': 4, 'ltrb_amodal': 4, 
       'nuscenes_att': 8, 'velocity': 3, 'hps': self.num_joints * 2, 
@@ -601,100 +530,9 @@ class GenericDataset(data.Dataset):
     return bbox, bbox_amodal
 
 
-  def _gen_kmf_att_hm(self, ret, pre_anns, trans_input):
-    trackers = {}
-    trans = trans_input
-    hm_h, hm_w = self.opt.input_h, self.opt.input_w
-    iid = None
-    for idx, anns in enumerate(pre_anns): #[..., n-2, n-1] 
-      for i, ann in enumerate(anns):
-        cls_id = int(self.cat_ids[ann['category_id']])
-        if cls_id > self.opt.num_classes or cls_id <= -999 or cls_id == 0:
-          continue
-        if 'bbox' not in anns[i].keys():
-          ann['bbox'] = mask_utils.toBbox(ann['segmentation'])
-        bbox = self._coco_box_to_bbox(ann['bbox'])
-        bbox[:2] = affine_transform(bbox[:2], trans)
-        bbox[2:] = affine_transform(bbox[2:], trans)
-        bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, hm_w - 1)
-        bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, hm_h - 1)
-        h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-        if h <= 0 or w <= 0:
-          continue
-        
-        if ann['track_id'] not in trackers:
-          trackers[ann['track_id']] = {}
-          trackers[ann['track_id']]['kmf'] = KalmanBoxTracker(bbox)
-          trackers[ann['track_id']]['age'] = 0
-          trackers[ann['track_id']]['cts_history'] = [np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)]
-        else:
-          if np.random.random() > self.opt.att_track_lost_disturb or idx == len(pre_anns) - 1:
-            trackers[ann['track_id']]['kmf'].predict()
-            trackers[ann['track_id']]['kmf'].update(bbox)
-            trackers[ann['track_id']]['age'] += 1
-            trackers[ann['track_id']]['cts_history'].append(np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32))
-    for k in trackers:
-      bbox = trackers[k]['kmf'].predict()[0]
-      pred_ct = self._add_kmf_att(ret=ret, bbox=bbox, trans_input=trans_input, init=(trackers[k]['age'] <= 0), draw=(self.opt.kmf_att))
-      if pred_ct is None:
-        trackers[k]['ct'] = trackers[k]['cts_history'][-1]
-      else:
-        trackers[k]['ct'] = pred_ct
-
-    return trackers
-
-  def _add_kmf_att(self, ret, trans_input, ann=None, bbox=None, init=False, conf=1, draw=True):
-    trans = trans_input
-    hm_h, hm_w = self.opt.input_h, self.opt.input_w
-    if bbox is None and ann is not None:
-      if 'bbox' not in ann.keys():
-        ann['bbox'] = mask_utils.toBbox(ann['segmentation'])
-      bbox = self._coco_box_to_bbox(ann['bbox'])
-      bbox[:2] = affine_transform(bbox[:2], trans)
-      bbox[2:] = affine_transform(bbox[2:], trans)
-      bbox[[0, 2]] = np.clip(bbox[[0, 2]], 0, hm_w - 1)
-      bbox[[1, 3]] = np.clip(bbox[[1, 3]], 0, hm_h - 1)
-    h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
-
-    if (h > 0 and w > 0):
-      ct = np.array([(bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2], dtype=np.float32)
-      if self.opt.guss_rad:
-        min_overlap = 0.2 if init else 0.6
-        conf = self.opt.init_conf if init else 1
-        radius = gaussian_radius_center((math.ceil(h), math.ceil(w)), min_overlap=0.2)
-      else:
-        radius = gaussian_radius((math.ceil(h), math.ceil(w)))
-      radius = max(0, int(radius)) 
-      
-      ct0 = ct.copy()
-
-      ct[0] = ct[0] + np.random.randn() * self.opt.att_hm_disturb * w
-      ct[1] = ct[1] + np.random.randn() * self.opt.att_hm_disturb * h
-      conf = conf if np.random.random() > self.opt.att_lost_disturb else 0
-      ct_int = ct.astype(np.int32)
-      if self.opt.guss_oval and draw:
-        radius = radius if (self.opt.guss_rad and init) or (self.opt.guss_rad and self.opt.guss_rad_always) else 0
-        draw_umich_gaussian_oval(ret['kmf_att'][0], ct_int, radius_h=h//2+radius, radius_w=w//2+radius, k=conf)
-      elif draw:
-        draw_umich_gaussian(ret['kmf_att'][0], ct_int, radius, k=conf)
-
-      if np.random.random() < self.opt.att_fp_disturb: # generate false positive 
-        ct2 = ct0.copy()
-        # Hard code heatmap disturb ratio, haven't tried other numbers.
-        ct2[0] = ct2[0] + np.random.randn() * self.opt.att_disturb_dist * w
-        ct2[1] = ct2[1] + np.random.randn() * self.opt.att_disturb_dist * h 
-        ct2_int = ct2.astype(np.int32)
-        if self.opt.guss_oval and draw:
-          draw_umich_gaussian_oval(ret['kmf_att'][0], ct2_int, radius_h=h//2, radius_w=w//2, k=conf)
-        elif draw:
-          draw_umich_gaussian(ret['kmf_att'][0], ct2_int, radius, k=conf)
-    else:
-      return None
-    return ct_int
-
   def _add_instance(
     self, ret, gt_det, k, cls_id, bbox, bbox_amodal, ann, trans_output,
-    aug_s, calib, seg_mask=None, pre_cts=None, track_ids=None, kmf_cts=None):
+    aug_s, calib, seg_mask=None, pre_cts=None, track_ids=None):
     h, w = bbox[3] - bbox[1], bbox[2] - bbox[0]
     if h <= 0 or w <= 0 or (seg_mask is not None and np.sum(seg_mask)<=0):
       return
@@ -739,11 +577,6 @@ class GenericDataset(data.Dataset):
         pre_ct = pre_cts[track_ids.index(ann['track_id'])]
         pre_ct_int = pre_ct.astype(np.int32)
         ret['pre_ind'][k] = pre_ct_int[1] * self.opt.output_w + pre_ct_int[0]
-        if kmf_cts is not None:
-          kmf_ct = kmf_cts[track_ids.index(ann['track_id'])]
-          kmf_ct_int = kmf_ct.astype(np.int32)
-          ret['kmf_ind'][k] = kmf_ct_int[1] * self.opt.output_w + kmf_ct_int[0]
-          ret['kmf_cts'][k] = kmf_ct
         ret['pre_mask'][k] = 1
       
     if 'seg' in self.opt.task and seg_mask is not None:

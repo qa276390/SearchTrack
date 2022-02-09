@@ -95,9 +95,6 @@ class BaseModel(nn.Module):
       if (pre_img is not None) and (self.opt.sch_track and not self.opt.sch_eval):
         feats = self.img2feats(x)
         pre_feats = self.img2feats(pre_img)
-      elif (not self.opt.sch_track) and ((pre_hm is not None) or (pre_img is not None) or (kmf_att is not None)):
-        kmf_att_in = None if self.opt.kmf_layer_out else kmf_att
-        feats = self.imgpre2feats(x, pre_img, pre_hm, kmf_att_in)
       else:
         feats = self.img2feats(x)
       out = []

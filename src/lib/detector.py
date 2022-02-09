@@ -117,7 +117,7 @@ class Detector(object):
           # the current image.
           pre_hms, pre_inds, kmf_hms, track_ids, kmf_inds, sch_weights = self._get_additional_inputs(
             self.tracker.tracks, meta, self.age_images, 
-            with_hm=not self.opt.zero_pre_hm, with_kmf=(self.opt.kmf_att or self.opt.kmf_ind), with_sch=self.opt.sch_eval)
+            with_hm=not self.opt.zero_pre_hm, with_kmf=self.opt.kmf_ind, with_sch=self.opt.sch_eval)
           
           pid2track = {int(pre_ind.cpu().detach().numpy()): track_id for pre_ind, track_id in zip(pre_inds[0], track_ids[0])}
       
