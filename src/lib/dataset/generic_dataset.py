@@ -112,7 +112,7 @@ class GenericDataset(data.Dataset):
       if flipped:
         pre_image = pre_image[:, ::-1, :].copy() 
         pre_anns = self._flip_anns(pre_anns, height, width) 
-      if opt.same_aug_pre and frame_dist != 0:
+      if (opt.same_aug_pre and frame_dist != 0) or 'val' in self.split:
         trans_input_pre = trans_input 
         trans_output_pre = trans_output
       else:
