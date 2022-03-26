@@ -9,13 +9,14 @@ COMING SOON...
 
 | Model                 |GPUs| Train time| Test time | Validation HOTA  | Test HOTA  | Download  |
 |-----------------------|----|-----------|-----------|------------------|------------|-----------|
-| [kitti_mots_sch_fulltrain](../experiments/kitti_mots_fulltrain.sh)         |    2 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/file/d/1gvBkDmCWjdJWHaFY50ZfrqhKGXQzi4MA/view?usp=sharing) |
-| [kitti_mots_sch_half](../experiments/kitti_mots_half.sh)         |    1 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/file/d/1c0EYf5aa6xG7NAfN8f2WYN3SKMno6sAu/view?usp=sharing) |
+| [kitti_mots_sch_fulltrain](../experiments/kitti_mots_fulltrain.sh)         |    2 |    -    | 0.19s     |            |       53.1/67.1     | [model](https://drive.google.com/file/d/1gvBkDmCWjdJWHaFY50ZfrqhKGXQzi4MA/view?usp=sharing) |
+| [kitti_mots_sch_half](../experiments/kitti_mots_half.sh)         |    1 |    -    | 0.19s      |         63.5/78.5     |      -     | [model](https://drive.google.com/file/d/1c0EYf5aa6xG7NAfN8f2WYN3SKMno6sAu/view?usp=sharing) |
 
 #### Notes
 
 - `*_half` corresponds to the half-half video train/ val split mentioned in the paper. 
-- - `*_fulltrain` corresponds to train on the full training set.
+- `*_fulltrain` corresponds to train on the full training set.
+- HOTA are report in pedestrian/car.
 -  all models are fine tune on [ctdet_coco_dla_2x.pth](https://drive.google.com/open?id=1pl_-ael8wERdUREEnaIfqOV_VF2bEVRT) provided by [CenterNet](https://github.com/xingyizhou/CenterNet/blob/master/readme/MODEL_ZOO.md).
 
 ### MOT17
