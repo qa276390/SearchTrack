@@ -1,6 +1,6 @@
 # SearchTrack
-A Search-Based Tracker with Poisition-Aware Motion Model:
-![](readme/fig1.png)
+SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features
+![](readme/fig1.pdf)
 
 <!-- > [**Tracking Objects as Points**](http://arxiv.org/abs/2004.01177),            
 > Xingyi Zhou, Vladlen Koltun, Philipp Kr&auml;henb&uuml;hl,        
@@ -17,20 +17,10 @@ A Search-Based Tracker with Poisition-Aware Motion Model:
 Contact: [qa276390@gmail.com](mailto:qa276390@gmail.com). Any questions or discussion are welcome! 
 
 ## Abstract
-In this project we focus on dealing with multiple-object tracking and segmentation(MOTS) problem. Top-performing work such as PointTrack focus on finding better representation
-for the appearance identities. In addition to object appearance, object motion is another key element that should be reckoned with while doing association. Instead of choose one
-of the them, we employ dynamic instance-aware networks combined with coordinate map given by Kalman filter. With the hint of predicted motion, our dynamic searcher could localize the associated object in next frame. Our work, SearchTrack, shows a compre- hensive thought of appearance and motion. We present a joint tasks tracker that is fast, straight-forward and more accurate than the state-of-the-art online method, in both 2D MOTS and MOT. It achieves 71.2 HOTA (car) and 57.6 HOTA (pedestrian) on KITTI MOTS leaderboard and 53.1 HOTA on MOT17.
+This project describe in paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To better resolve the association problem between detected objects, SearchTrack proposes to use object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which contains both motion and appearance cues. SearchTrack forms a customized fully convolutional search engine for each object by learning a set of weights for dynamic convolutions specific for the object. Our experiments demonstrate that our SearchTrack 018 method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy.
 
 
-<!-- ## Features at a glance
 
-- One-sentence method summary: Our model takes the current frame, the previous frame, and a heatmap rendered from previous tracking results as input, and predicts the current detection heatmap as well as their offsets to centers in the previous frame.
-
-- The model can be trained on still **image datasets** if videos are not available.
-
-- Easily extends to monocular 3d object tracking, multi-category tracking, and pose tracking.
-
-- State-of-the-art performance on MOT17, KITTI, and nuScenes monocular tracking benchmarks. -->
 
 ## Main results
 
@@ -57,8 +47,7 @@ Please refer to [INSTALL.md](readme/INSTALL.md) for installation instructions.
 
 ## Benchmark Evaluation and Training
 
-After [installation](readme/INSTALL.md), follow the instructions in [DATA.md](readme/DATA.md) to setup the datasets. Then check [GETTING_STARTED.md](readme/GETTING_STARTED.md) to reproduce the results in the paper.
-We provide scripts for all the experiments in the [experiments](experiments) folder.
+After [installation](readme/INSTALL.md), follow the instructions in [DATA.md](readme/DATA.md) to setup the datasets. We provide scripts for all the experiments in the [experiments](experiments) folder. Also, models can be found in [MODEL_ZOO.md](readme/MODEL_ZOO.md).
 
 ## License
 
