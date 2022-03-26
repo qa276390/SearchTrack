@@ -1,5 +1,4 @@
 # MODEL ZOO
-COMING SOON...
 
 - The experiments are run with PyTorch 1.0, CUDA 10.0, and CUDNN 7.5.
 - Training and testing times are measured on our servers with V100s GPUs.
