@@ -1,5 +1,5 @@
 # Getting Started
-
+<!--
 This document provides tutorials to train and evaluate CenterTrack. Before getting started, make sure you have finished [installation](INSTALL.md) and [dataset setup](DATA.md).
 
 ## Benchmark evaluation
