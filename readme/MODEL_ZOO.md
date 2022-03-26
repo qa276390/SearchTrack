@@ -7,10 +7,10 @@ COMING SOON...
 
 ### KITTI MOTS 
 
-| Model                 |GPUs| Train time| Test time | Validation MOTA  | Test MOTA  | Download  |
+| Model                 |GPUs| Train time| Test time | Validation HOTA  | Test HOTA  | Download  |
 |-----------------------|----|-----------|-----------|------------------|------------|-----------|
-| [kitti_mots_sch_fulltrain](../experiments/kitti_mots_fulltrain.sh)         |    2 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/open?id=12xnXeY-kW3otNjCoQtyJAayHFiQdTTAU) |
-| [kitti_mots_sch_half](../experiments/kitti_mots_half.sh)         |    1 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/open?id=12xnXeY-kW3otNjCoQtyJAayHFiQdTTAU) |
+| [kitti_mots_sch_fulltrain](../experiments/kitti_mots_fulltrain.sh)         |    2 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/file/d/1gvBkDmCWjdJWHaFY50ZfrqhKGXQzi4MA/view?usp=sharing) |
+| [kitti_mots_sch_half](../experiments/kitti_mots_half.sh)         |    1 |    2h    | 45ms      |         60.7     |      -     | [model](https://drive.google.com/file/d/1c0EYf5aa6xG7NAfN8f2WYN3SKMno6sAu/view?usp=sharing) |
 
 #### Notes
 
@@ -22,9 +22,9 @@ COMING SOON...
 
 | Model                 | GPUs |Train time| Test time | Valication MOTA  | Test MOTA  | Download | 
 |-----------------------|------|----------|-----------|------------------|------------|----------|
-| [mot17_fulltrain_sch_ch](../experiments/mot17_fulltrain.sh)       |    2 |    -    | -     |          -       |67.3 (Private Detection)|  [model](https://drive.google.com/open?id=1h_8Ts11rf0GQ4_n6FgmCeBuFcWrRjJfa)     |
-| [mot17_half_sch](../experiments/mot17_half.sh)            |    2 |    -    | -     |         66.1     |      -     | [model](https://drive.google.com/open?id=1sf1bWJ1LutwQ_wp176nd2Y3HII9WeFf0) |
-| [crowdhuman_sch](../experiments/crowdhuman.sh)            |    2 |    -   | -      |       -     |      -     |[model](https://drive.google.com/open?id=1rIVl-jSG6oiBdiJmCvIAUOeasT7YllRZ) |
+| [mot17_fulltrain_sch_ch](../experiments/mot17_fulltrain.sh)       |    2 |    -    | -     |          -       |67.3 (Private Detection)|  [model](https://drive.google.com/file/d/1tmpGfoCyDdFkl3R3UpYLyh5SR8spSLQ_/view?usp=sharing)     |
+| [mot17_half_sch](../experiments/mot17_half.sh)            |    2 |    -    | -     |         66.1     |      -     | [model](https://drive.google.com/file/d/1FsL_apCEpx4LTKg8PSZkr1TRCy0tVw8s/view?usp=sharing) |
+| [crowdhuman_sch](../experiments/crowdhuman.sh)            |    2 |    -   | -      |       -     |      -     |[model](https://drive.google.com/file/d/1YXXNaoLFYf5ovdXcs4xUw5ER6aP44l8z/view?usp=sharing) |
 
 #### Notes
 
