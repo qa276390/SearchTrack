@@ -1,6 +1,6 @@
 # SearchTrack
 SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features
-![](readme/ECCV-4.pdf)
+![](readme/ECCV-4.png)
 
 <!-- > [**Tracking Objects as Points**](http://arxiv.org/abs/2004.01177),            
 > Xingyi Zhou, Vladlen Koltun, Philipp Kr&auml;henb&uuml;hl,        
