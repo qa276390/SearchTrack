@@ -18,7 +18,7 @@ We use KITTI MOTS to train and evaluate the system. We will only use the trainin
           |   |-- |-- |-- 0000
           |   |-- |-- |-- ...
           |-- |-- testing
-          |-- label_02
+          |-- instances_txt
           |   |-- 0000.txt
           |   |-- ...
   ~~~

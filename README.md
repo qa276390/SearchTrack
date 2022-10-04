@@ -1,24 +1,19 @@
 # SearchTrack
-SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features
-![](readme/ECCV-4.png)
+(BMVC 2022) SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features
 
-<!-- > [**Tracking Objects as Points**](http://arxiv.org/abs/2004.01177),            
-> Xingyi Zhou, Vladlen Koltun, Philipp Kr&auml;henb&uuml;hl,        
-> *arXiv technical report ([arXiv 2004.01177](http://arxiv.org/abs/2004.01177))*  
+![](readme/SearchTrack-crop.pdf)
+
+> **SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**,
+> Zhong-Min Tsai*, Yu-Ju Tsai*, Chien-Yao Wang, Hong-Yuan Liao, Youn-Long Lin, Yung-Yu Chuang, 
+> *BMVC 2022*  
+*Contributed equally 
 
 
-    @article{zhou2020tracking,
-      title={Tracking Objects as Points},
-      author={Zhou, Xingyi and Koltun, Vladlen and Kr{\"a}henb{\"u}hl, Philipp},
-      journal={ECCV},
-      year={2020}
-    } -->
-
-Contact: [qa276390@gmail.com](mailto:qa276390@gmail.com). Any questions or discussion are welcome! 
+Contact: [qa276390@gmail.com](mailto:qa276390@gmail.com) or [r06922009@cmlab.csie.ntu.edu.tw](mailto:r06922009@cmlab.csie.ntu.edu.tw). Any questions or discussion are welcome! 
 
 ## Abstract
-This project describe in paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To better resolve the association problem between detected objects, SearchTrack proposes to use object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which contains both motion and appearance cues. SearchTrack forms a customized fully convolutional search engine for each object by learning a set of weights for dynamic convolutions specific for the object. Our experiments demonstrate that our SearchTrack 018 method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy.
-
+<!-- This project describe in paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To better resolve the association problem between detected objects, SearchTrack proposes to use object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which contains both motion and appearance cues. SearchTrack forms a customized fully convolutional search engine for each object by learning a set of weights for dynamic convolutions specific for the object. Our experiments demonstrate that our SearchTrack method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy. -->
+The paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To address the association problem between detected objects, SearchTrack proposes object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which includes both motion and appearance cues. For each object, a customized fully convolutional search engine is created by SearchTrack by learning a set of weights for dynamic convolutions specific to the object. Experiments demonstrate that our SearchTrack method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy. Our method achieves 71.5 HOTA (car) and 57.6 HOTA (pedestrian) on the KITTI MOTS and 53.4 HOTA on MOT17. In terms of association accuracy, our method achieves state-of-the-art performance among 2D online methods on the KITTI MOTS.
 
 
 
@@ -53,3 +48,15 @@ After [installation](readme/INSTALL.md), follow the instructions in [DATA.md](re
 
 SearchTrack is developed upon [CenterNet](https://github.com/xingyizhou/CenterNet) and [CenterTrack](https://github.com/xingyizhou/CenterTrack). Both codebases are released under MIT License themselves. Some code of CenterNet are from third-parties with different licenses, please check the CenterNet repo for details. In addition, this repo uses [py-motmetrics](https://github.com/cheind/py-motmetrics) and [TrackEval](https://github.com/JonathonLuiten/TrackEval) for evaluation. See [NOTICE](NOTICE) for detail. Please note the licenses of each dataset. Most of the datasets we used in this project are under non-commercial licenses.
 
+
+## Citation
+If you find this project useful for your research, please use the following BibTeX entry.
+
+~~~
+@inproceedings{tsai2022searchtrack,
+  title={SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features.},
+  author={Tsai, Zhong-Min and Tsai, Yu-Ju and Wang, Chien-Yao and Liao, Hong-Yuan and Lin, Youn-Long and Chuang, Yung-Yu},
+  booktitle={BMVC},
+  year={2022}
+}
+~~~
