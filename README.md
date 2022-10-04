@@ -1,10 +1,10 @@
 # SearchTrack
 (BMVC 2022) SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features
 
-![](readme/SearchTrack-crop.pdf)
+![](readme/SearchTrack-crop-1.png)
 
-> **SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**,
-> Zhong-Min Tsai*, Yu-Ju Tsai*, Chien-Yao Wang, Hong-Yuan Liao, Youn-Long Lin, Yung-Yu Chuang, 
+> **SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**,  
+> Zhong-Min Tsai*, Yu-Ju Tsai*, Chien-Yao Wang, Hong-Yuan Liao, Youn-Long Lin, Yung-Yu Chuang,  
 > *BMVC 2022*  
 *Contributed equally 
 
