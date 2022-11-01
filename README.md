@@ -3,9 +3,10 @@
 
 ![](readme/SearchTrack-crop-1.png)
 
-> **SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**,  
+> [**SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**](https://arxiv.org/abs/2210.16572),  
 > Zhong-Min Tsai*, Yu-Ju Tsai*, Chien-Yao Wang, Hong-Yuan Liao, Youn-Long Lin, Yung-Yu Chuang,  
 > *BMVC 2022*  
+> *[Paper Link](http://arxiv.org/abs/2004.01177)*  
 *Contributed equally 
 
 
@@ -22,16 +23,16 @@ The paper presents a new method, SearchTrack, for multiple object tracking and s
 
 ### KITTI MOTS test set 
 
-|             |  HOTA      |  sMOTSA   |
-|-------------|------------|----------|
-|Car          | 71.5       |   74.9   |
-|Pedestrian   | 57.6       |   60.6   |
+|             |  HOTA      |  sMOTSA  |  AssA   |
+|-------------|------------|----------|----------
+|Car          | 71.5       |   74.9   |  67.1   |
+|Pedestrian   | 57.6       |   60.6   |  53.1   |
 
 ### Pedestrian tracking on MOT17 test set
 
-| Detection    |  HOTA     | MOTA   |
-|--------------|----------|--------|
-|Public        | 53.4     |  68.0   |
+| Detection    |  HOTA    |  MOTA   |  AssA | 
+|--------------|----------|---------|-------|
+|Public        | 53.4     |  68.0   | 51.6  |
 
 
 
