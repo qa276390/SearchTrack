@@ -16,11 +16,11 @@
 - `*_half` corresponds to the half-half video train/ val split mentioned in the paper. 
 - `*_fulltrain` corresponds to train on the full training set.
 - HOTA are report in pedestrian/car.
--  all models are fine tune on [ctdet_coco_dla_2x.pth](https://drive.google.com/open?id=1pl_-ael8wERdUREEnaIfqOV_VF2bEVRT) provided by [CenterNet](https://github.com/xingyizhou/CenterNet/blob/master/readme/MODEL_ZOO.md).
+-  all models are fine tune on [ctdet_coco_dla_2x.pth](https://drive.google.com/file/d/18Q3fzzAsha_3Qid6mn4jcIFPeOGUaj1d/edit) provided by [CenterNet](https://github.com/xingyizhou/CenterNet/blob/master/readme/MODEL_ZOO.md).
 
 ### MOT17
 
-| Model                 | GPUs |Train time| Test time | Valication HOTA  | Test HOTA  | Download | 
+| Model                 | GPUs |Train time| Test time | Validation HOTA  | Test HOTA  | Download | 
 |-----------------------|------|----------|-----------|------------------|------------|----------|
 | [mot17_fulltrain_sch_ch](../experiments/mot17_fulltrain.sh)       |    2 |    -    | -     |          -       | 53.4 |  [model](https://drive.google.com/file/d/1tmpGfoCyDdFkl3R3UpYLyh5SR8spSLQ_/view?usp=sharing)     |
 | [mot17_half_sch](../experiments/mot17_half.sh)            |    2 |    -    | -     |         -    |      -     | [model](https://drive.google.com/file/d/1FsL_apCEpx4LTKg8PSZkr1TRCy0tVw8s/view?usp=sharing) |

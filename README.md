@@ -13,7 +13,7 @@
 Contact: [qa276390@gmail.com](mailto:qa276390@gmail.com) or [r06922009@cmlab.csie.ntu.edu.tw](mailto:r06922009@cmlab.csie.ntu.edu.tw). Any questions or discussion are welcome! 
 
 ## Abstract
-<!-- This project describe in paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To better resolve the association problem between detected objects, SearchTrack proposes to use object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which contains both motion and appearance cues. SearchTrack forms a customized fully convolutional search engine for each object by learning a set of weights for dynamic convolutions specific for the object. Our experiments demonstrate that our SearchTrack method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy. -->
+
 The paper presents a new method, SearchTrack, for multiple object tracking and segmentation (MOTS). To address the association problem between detected objects, SearchTrack proposes object-customized search and motion-aware features. By maintaining a Kalman filter for each object, we encode the predicted motion into the motion-aware feature, which includes both motion and appearance cues. For each object, a customized fully convolutional search engine is created by SearchTrack by learning a set of weights for dynamic convolutions specific to the object. Experiments demonstrate that our SearchTrack method outperforms competitive methods on both MOTS and MOT tasks, particularly in terms of association accuracy. Our method achieves 71.5 HOTA (car) and 57.6 HOTA (pedestrian) on the KITTI MOTS and 53.4 HOTA on MOT17. In terms of association accuracy, our method achieves state-of-the-art performance among 2D online methods on the KITTI MOTS.
 
 
@@ -47,7 +47,7 @@ After [installation](readme/INSTALL.md), follow the instructions in [DATA.md](re
 
 ## License
 
-SearchTrack is developed upon [CenterNet](https://github.com/xingyizhou/CenterNet) and [CenterTrack](https://github.com/xingyizhou/CenterTrack). Both codebases are released under MIT License themselves. Some code of CenterNet are from third-parties with different licenses, please check the CenterNet repo for details. In addition, this repo uses [py-motmetrics](https://github.com/cheind/py-motmetrics) and [TrackEval](https://github.com/JonathonLuiten/TrackEval) for evaluation. See [NOTICE](NOTICE) for detail. Please note the licenses of each dataset. Most of the datasets we used in this project are under non-commercial licenses.
+SearchTrack is developed upon [CenterNet](https://github.com/xingyizhou/CenterNet) and [CenterTrack](https://github.com/xingyizhou/CenterTrack). Both codebases are released under MIT License themselves. Some code of CenterNet are from third-parties with different licenses, please check the CenterNet repo for details. In addition, this repo uses [mots_tools](https://github.com/VisualComputingInstitute/mots_tools) and [TrackEval](https://github.com/JonathonLuiten/TrackEval) for evaluation and visualization. See [NOTICE](NOTICE) for detail. Please note the licenses of each dataset. Most of the datasets we used in this project are under non-commercial licenses.
 
 
 ## Citation
