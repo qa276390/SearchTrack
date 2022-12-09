@@ -6,7 +6,7 @@
 > [**SearchTrack: Multiple Object Tracking with Object-Customized Search and Motion-Aware Features**](https://arxiv.org/abs/2210.16572),  
 > Zhong-Min Tsai*, Yu-Ju Tsai*, Chien-Yao Wang, Hong-Yuan Liao, Youn-Long Lin, Yung-Yu Chuang,  
 > *BMVC 2022*  
-> *[Paper Link](http://arxiv.org/abs/2004.01177)*  
+> *[Paper Link](https://arxiv.org/abs/2210.16572)*  
 *Contributed equally 
 
 
